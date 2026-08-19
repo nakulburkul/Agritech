@@ -1,0 +1,8 @@
+{
+  "name": "Cultivo AgriTech",
+  "description": "An agritech platform for farmers to predict crops, track prices, and sell produce.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
