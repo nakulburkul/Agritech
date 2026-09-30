@@ -46,6 +46,9 @@ const CROP_IMAGES: Record<string, string> = {
   'mataki': 'https://images.unsplash.com/photo-1585994192701-f1a505c817ea?auto=format&fit=crop&w=400&q=80',
   'pumpkin': 'https://images.unsplash.com/photo-1506917728037-b6fb041a4f34?auto=format&fit=crop&w=400&q=80',
   'cowpea': 'https://images.unsplash.com/photo-1585994192701-f1a505c817ea?auto=format&fit=crop&w=400&q=80',
+  'tamarind fruit': 'https://www.allrecipes.com/thmb/yHithL-d5CwWDIvpbQpNrb2lJoo=/750x0/filters:no_upscale():max_bytes(150000):strip_icc():format(webp)/GettyImages-1147545054-2000-cf62d6b8188846518193157fba8449be.jpg',
+  'Bajra(Pearl Millet/Cumbu)': 'https://dhanyam.in/wp-content/uploads/2026/03/35226_3.jpg',
+
   'default': 'https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&w=400&q=80',
 };
 

@@ -4,15 +4,32 @@ import { BrandScrollTransition } from '../components/BrandScrollTransition';
 import { CultivatingSection } from '../components/CultivatingSection';
 import { FeaturesSection } from '../components/FeaturesSection';
 import { InnovationSection } from '../components/InnovationSection';
+import { DotNavigation } from '../components/DotNavigation';
 
 export function LandingPage() {
   return (
-    <>
-      <Hero />
-      <BrandScrollTransition />
-      <CultivatingSection />
-      <FeaturesSection />
-      <InnovationSection />
-    </>
+    <div className="relative">
+      <DotNavigation />
+      
+      <section id="hero">
+        <Hero />
+      </section>
+      
+      <section id="brand">
+        <BrandScrollTransition />
+      </section>
+      
+      <section id="cultivating">
+        <CultivatingSection />
+      </section>
+      
+      <section id="features">
+        <FeaturesSection />
+      </section>
+      
+      <section id="innovation">
+        <InnovationSection />
+      </section>
+    </div>
   );
 }

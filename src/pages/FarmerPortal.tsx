@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Package, IndianRupee, Sprout, TrendingUp, Plus, Activity, LayoutDashboard, Settings, User, X, Handshake, CheckCircle2, XCircle, Truck, MapPin, Bell, BarChart2, CloudSun, ChevronRight, Loader2, Sun, Droplets, ThermometerSun, AlertTriangle, RefreshCw, Navigation } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useShop, Product, Offer } from '../context/ShopContext';
 import { fetchMarketPrices, CommodityData, MAHARASHTRA_DISTRICTS } from '../services/marketApi';
 
 export function FarmerPortal() {
-  const { products, offers, addProduct, updateOfferStatus } = useShop();
+  const currentUser = localStorage.getItem('username') || '';
+  
+  // REAL DATABASE STATES
+  const [listings, setListings] = useState<any[]>([]);
+  const [offers, setOffers] = useState<any[]>([]);
+  const [isLoadingInventory, setIsLoadingInventory] = useState(true);
+
   const [isAddingCrop, setIsAddingCrop] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   
@@ -23,14 +28,12 @@ export function FarmerPortal() {
   const [soilType, setSoilType] = useState('Black Cotton');
   const [hasIrrigation, setHasIrrigation] = useState(false);
   
-  // Mandi Data & Market Dropdown Selection Memory
+  // Mandi Data
   const [localMandiPrices, setLocalMandiPrices] = useState<CommodityData[]>([]);
   const [selectedMarkets, setSelectedMarkets] = useState<Record<string, number>>({});
   const [isLoadingMandi, setIsLoadingMandi] = useState(false);
 
-  const CURRENT_FARMER_ID = 'FRM-1044';
-  const myOffers = offers.filter(o => o.farmerId === CURRENT_FARMER_ID);
-  const pendingOffersCount = myOffers.filter(o => o.status === 'Pending').length;
+  const pendingOffersCount = offers.filter(o => o.status === 'Pending').length;
   
   // Add Crop Modal Form State
   const [name, setName] = useState('');
@@ -38,13 +41,37 @@ export function FarmerPortal() {
   const [stock, setStock] = useState('');
   const [category, setCategory] = useState('Vegetables');
   const [location, setLocation] = useState('Pune, MH');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Trigger GPS detection on mount
+  // FETCH REAL DATA
+  const fetchMyInventory = async () => {
+    setIsLoadingInventory(true);
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/inventory/?username=${currentUser}`);
+      const data = await res.json();
+      if (data.status === 'success') setListings(data.data);
+    } catch (err) {
+      console.error("Failed to fetch inventory");
+    }
+    setIsLoadingInventory(false);
+  };
+
+  const fetchMyOffers = async () => {
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/offers/?farmer=${currentUser}`);
+      const data = await res.json();
+      if (data.status === 'success') setOffers(data.data);
+    } catch (err) {
+      console.error("Failed to fetch offers");
+    }
+  };
+
   useEffect(() => {
+    fetchMyInventory();
+    fetchMyOffers();
     handleUseGPS();
-  }, []);
+  }, [currentUser]);
 
-  // Fetch district mandi prices when selected district changes
   useEffect(() => {
     if (selectedDistrict) {
       loadMandiPrices(selectedDistrict);
@@ -55,12 +82,9 @@ export function FarmerPortal() {
     setIsLoadingMandi(true);
     const data = await fetchMarketPrices(district);
     setLocalMandiPrices(data);
-    
-    // Set each card to default to its first mandi
     const initialMap: Record<string, number> = {};
     data.forEach(item => { initialMap[item.id] = 0; });
     setSelectedMarkets(initialMap);
-    
     setIsLoadingMandi(false);
   };
 
@@ -84,7 +108,6 @@ export function FarmerPortal() {
           setAnalytics(null);
           setLocationStatus('');
         } catch (err) {
-          console.error('GPS Geocoding failed', err);
           setLocationStatus('');
         }
       },
@@ -125,28 +148,47 @@ export function FarmerPortal() {
     setLocationStatus('');
   };
 
-  const handleResetAnalysis = () => {
-    setPrediction('');
-    setPredictions([]);
-    setAnalytics(null);
-  };
-
-  const handleAddCrop = (e: React.FormEvent) => {
+  // POST NEW LISTING TO DB
+  const handleAddCrop = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !price || !stock) return;
+    setIsSubmitting(true);
+    
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/inventory/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: currentUser,
+          crop_name: name,
+          category: category,
+          price: parseFloat(price),
+          stock: parseInt(stock, 10)
+        })
+      });
+      if (res.ok) {
+        setIsAddingCrop(false);
+        setName(''); setPrice(''); setStock('');
+        fetchMyInventory();
+      }
+    } catch (err) {
+      alert("Failed to add listing.");
+    }
+    setIsSubmitting(false);
+  };
 
-    let defaultImage = '';
-    if (category === 'Vegetables') defaultImage = 'https://images.unsplash.com/photo-1595856728564-9842514110b6?q=80&w=400&auto=format&fit=crop';
-    else if (category === 'Fruits') defaultImage = 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=400&auto=format&fit=crop';
-    else defaultImage = 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=400&q=80';
-
-    addProduct({
-      name, price: parseFloat(price), stock: parseInt(stock, 10),
-      category, status: 'Active', image: defaultImage, location: location
-    });
-
-    setIsAddingCrop(false);
-    setName(''); setPrice(''); setStock('');
+  // PATCH OFFER STATUS TO DB
+  const updateOfferStatus = async (offerId: string, newStatus: string) => {
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/offers/', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ offer_id: offerId, status: newStatus })
+      });
+      if (res.ok) fetchMyOffers();
+    } catch (err) {
+      alert("Failed to update status.");
+    }
   };
 
   return (
@@ -155,11 +197,11 @@ export function FarmerPortal() {
       {/* Sidebar (Desktop) */}
       <aside className="w-full md:w-64 bg-white border-r border-slate-200 px-6 py-8 hidden md:block shrink-0">
         <div className="flex items-center gap-3 mb-10">
-          <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-100 border border-slate-200">
-            <img src="https://i.pravatar.cc/150?u=a042581f4e29026704d" alt="Profile" className="w-full h-full object-cover" />
+          <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold text-lg border border-slate-200">
+            {currentUser.charAt(0).toUpperCase()}
           </div>
           <div>
-            <p className="font-bold text-slate-800">Farmer {CURRENT_FARMER_ID}</p>
+            <p className="font-bold text-slate-800">{currentUser}</p>
             <p className="text-xs text-emerald-600 font-semibold">Verified Seller</p>
           </div>
         </div>
@@ -190,14 +232,14 @@ export function FarmerPortal() {
           </div>
         )}
 
+        {/* Dashboard Tab */}
         {activeTab === 'dashboard' && (
           <div className="w-full">
-            {/* Top Banner */}
             <div className="bg-[#0b5c43] rounded-[2rem] p-6 md:p-8 text-white relative mb-16 overflow-hidden shadow-lg">
               <div className="flex justify-between items-center mb-10 relative z-10">
                 <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-white/20 shrink-0">
-                    <img src="https://i.pravatar.cc/150?u=a042581f4e29026704d" alt="Profile" className="w-full h-full object-cover" />
+                  <div className="w-14 h-14 bg-emerald-700/50 rounded-full overflow-hidden border-2 border-white/20 shrink-0 flex items-center justify-center font-bold text-xl">
+                    {currentUser.charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <p className="text-xs text-emerald-100 font-medium mb-0.5">Location</p>
@@ -213,7 +255,6 @@ export function FarmerPortal() {
               <div className="h-20 md:h-24"></div> 
             </div>
 
-            {/* Metric Cards */}
             <div className="px-4 md:px-8 -mt-32 md:-mt-40 relative z-20 flex gap-4 md:gap-6 mb-10">
               <div className="bg-white rounded-[2rem] p-5 md:p-6 flex-1 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
                 <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 mb-4">
@@ -234,7 +275,6 @@ export function FarmerPortal() {
             </div>
 
             <div className="px-2">
-              {/* DISTRICT SELECTION CONTROL BAR WITH GPS */}
               <div className="bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-3 w-full sm:w-auto">
                   <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
@@ -247,7 +287,6 @@ export function FarmerPortal() {
                 </div>
 
                 <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                  {/* Maharashtra District Dropdown */}
                   <select
                     value={selectedDistrict}
                     onChange={(e) => {
@@ -266,7 +305,6 @@ export function FarmerPortal() {
                     ))}
                   </select>
 
-                  {/* GPS Button */}
                   <button 
                     type="button" 
                     onClick={handleUseGPS} 
@@ -382,9 +420,8 @@ export function FarmerPortal() {
                           </div>
                         </div>
                       </div>
-
                       <button 
-                        onClick={handleResetAnalysis} 
+                        onClick={() => { setPrediction(''); setPredictions([]); setAnalytics(null); }} 
                         className="w-full py-2.5 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors flex items-center justify-center gap-2 border border-slate-200 rounded-xl"
                       >
                         <RefreshCw className="w-4 h-4" /> Run New Analysis
@@ -432,8 +469,6 @@ export function FarmerPortal() {
                             </div>
                             <div className="p-4 flex flex-col flex-1">
                               <h4 className="font-bold text-base text-slate-800 mb-1">{crop.commodity}</h4>
-                              
-                              {/* Market Location Selector if multiple markets exist in district */}
                               <div className="mb-2">
                                 <select 
                                   value={mIdx}
@@ -477,7 +512,7 @@ export function FarmerPortal() {
               </h3>
             </div>
             
-            {myOffers.length === 0 ? (
+            {offers.length === 0 ? (
               <div className="p-12 flex flex-col items-center justify-center text-slate-500 text-center">
                 <Handshake className="w-12 h-12 mb-4 text-slate-300" />
                 <h4 className="font-bold text-slate-800 mb-1">No Offers Yet</h4>
@@ -485,82 +520,71 @@ export function FarmerPortal() {
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {myOffers.map(offer => {
-                  const product = products.find(p => p.id === offer.productId);
-                  return (
-                    <div key={offer.id} className="p-6 hover:bg-slate-50/50 transition-colors flex flex-col md:flex-row gap-6">
-                      {product && (
-                        <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 bg-slate-100 border border-slate-200">
-                          <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                {offers.map(offer => (
+                  <div key={offer.id} className="p-6 hover:bg-slate-50/50 transition-colors flex flex-col md:flex-row gap-6">
+                    <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 bg-slate-100 border border-slate-200">
+                      <img src={offer.image} alt={offer.productName} className="w-full h-full object-cover" />
+                    </div>
+                    
+                    <div className="flex-1">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h4 className="font-bold text-slate-800 text-lg">{offer.productName}</h4>
+                          <p className="text-sm text-slate-500">Buyer: <span className="font-semibold text-slate-700">{offer.buyerId}</span></p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                          offer.status === 'Pending' ? 'bg-orange-50 text-orange-600 border-orange-200' :
+                          offer.status === 'Accepted' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
+                          'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}>
+                          {offer.status}
+                        </span>
+                      </div>
+                      
+                      <div className="flex flex-wrap gap-4 mb-4">
+                        <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                          <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Offered Price</p>
+                          <p className="font-bold text-slate-800">₹{offer.proposedPrice} <span className="text-xs font-normal text-slate-500">/ kg</span></p>
+                        </div>
+                        <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                          <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Quantity Required</p>
+                          <p className="font-bold text-slate-800">{offer.quantity} <span className="text-xs font-normal text-slate-500">kg</span></p>
+                        </div>
+                        <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                          <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Total Deal Value</p>
+                          <p className="font-bold text-emerald-700">₹{(offer.proposedPrice * offer.quantity).toLocaleString()}</p>
+                        </div>
+                        <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                          <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Transport Terms</p>
+                          <p className="font-bold text-slate-800 flex items-center gap-1.5"><Truck className="w-3.5 h-3.5 text-slate-500" /> {offer.transportArrangement}</p>
+                        </div>
+                      </div>
+                      
+                      {offer.status === 'Pending' && (
+                        <div className="flex gap-3">
+                          <button 
+                            onClick={() => updateOfferStatus(offer.id, 'Accepted')}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors"
+                          >
+                            <CheckCircle2 className="w-4 h-4" /> Accept Offer
+                          </button>
+                          <button 
+                            onClick={() => updateOfferStatus(offer.id, 'Declined')}
+                            className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-50 transition-colors"
+                          >
+                            <XCircle className="w-4 h-4" /> Decline
+                          </button>
                         </div>
                       )}
-                      
-                      <div className="flex-1">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <h4 className="font-bold text-slate-800 text-lg">{offer.productName}</h4>
-                            <p className="text-sm text-slate-500">Buyer: <span className="font-semibold text-slate-700">{offer.buyerId}</span></p>
-                          </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                            offer.status === 'Pending' ? 'bg-orange-50 text-orange-600 border-orange-200' :
-                            offer.status === 'Accepted' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
-                            'bg-slate-100 text-slate-600 border-slate-200'
-                          }`}>
-                            {offer.status}
-                          </span>
-                        </div>
-                        
-                        <div className="flex flex-wrap gap-4 mb-4">
-                          <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
-                            <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Offered Price</p>
-                            <p className="font-bold text-slate-800">₹{offer.proposedPrice} <span className="text-xs font-normal text-slate-500">/ kg</span></p>
-                          </div>
-                          <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
-                            <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Quantity Required</p>
-                            <p className="font-bold text-slate-800">{offer.quantity} <span className="text-xs font-normal text-slate-500">kg</span></p>
-                          </div>
-                          <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
-                            <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Total Deal Value</p>
-                            <p className="font-bold text-emerald-700">₹{(offer.proposedPrice * offer.quantity).toLocaleString()}</p>
-                          </div>
-                          <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
-                            <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Transport Terms</p>
-                            <p className="font-bold text-slate-800 flex items-center gap-1.5"><Truck className="w-3.5 h-3.5 text-slate-500" /> {offer.transportArrangement}</p>
-                          </div>
-                        </div>
-                        
-                        {offer.message && (
-                          <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100/50 mb-4">
-                            <p className="text-sm text-slate-700 italic">"{offer.message}"</p>
-                          </div>
-                        )}
-                        
-                        {offer.status === 'Pending' && (
-                          <div className="flex gap-3">
-                            <button 
-                              onClick={() => updateOfferStatus(offer.id, 'Accepted')}
-                              className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors"
-                            >
-                              <CheckCircle2 className="w-4 h-4" /> Accept Offer
-                            </button>
-                            <button 
-                              onClick={() => updateOfferStatus(offer.id, 'Declined')}
-                              className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-50 transition-colors"
-                            >
-                              <XCircle className="w-4 h-4" /> Decline
-                            </button>
-                          </div>
-                        )}
-                      </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             )}
           </div>
         )}
 
-        {/* Listings Tab */}
+        {/* REAL DATABASE Listings Tab */}
         {activeTab === 'crops' && (
           <div className="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-sm">
             <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -578,34 +602,49 @@ export function FarmerPortal() {
                   </tr>
                 </thead>
                 <tbody className="text-sm">
-                  <AnimatePresence>
-                    {products.map(product => (
-                      <motion.tr 
-                        key={product.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors"
-                      >
-                        <td className="px-6 py-4 font-semibold text-slate-800 flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-100 shrink-0">
-                            <img src={product.image} className="w-full h-full object-cover" alt={product.name} />
-                          </div>
-                          {product.name}
-                        </td>
-                        <td className="px-6 py-4 text-slate-600 font-medium">{product.category}</td>
-                        <td className="px-6 py-4 text-slate-600 font-medium">₹{product.price.toFixed(2)} / kg</td>
-                        <td className="px-6 py-4 text-slate-600">{product.stock} kg</td>
-                        <td className="px-6 py-4">
-                          {product.stock > 0 ? (
-                            <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-xs font-bold">Active</span>
-                          ) : (
-                            <span className="bg-red-50 text-red-600 px-3 py-1 rounded-full text-xs font-bold">Sold Out</span>
-                          )}
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </AnimatePresence>
+                  {isLoadingInventory ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center">
+                        <Loader2 className="w-8 h-8 animate-spin text-emerald-500 mx-auto mb-2" />
+                        <p className="text-slate-500">Loading your inventory...</p>
+                      </td>
+                    </tr>
+                  ) : listings.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center text-slate-500 font-medium">
+                        You have no active listings yet. Click "Add New Listing" to get started.
+                      </td>
+                    </tr>
+                  ) : (
+                    <AnimatePresence>
+                      {listings.map((product) => (
+                        <motion.tr 
+                          key={product.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors"
+                        >
+                          <td className="px-6 py-4 font-semibold text-slate-800 flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-100 shrink-0">
+                              <img src={product.image} className="w-full h-full object-cover" alt={product.name} />
+                            </div>
+                            {product.name}
+                          </td>
+                          <td className="px-6 py-4 text-slate-600 font-medium">{product.category}</td>
+                          <td className="px-6 py-4 text-slate-600 font-medium">₹{product.price.toFixed(2)} / kg</td>
+                          <td className="px-6 py-4 text-slate-600">{product.stock} kg</td>
+                          <td className="px-6 py-4">
+                            {product.stock > 0 ? (
+                              <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-xs font-bold">Active</span>
+                            ) : (
+                              <span className="bg-red-50 text-red-600 px-3 py-1 rounded-full text-xs font-bold">Sold Out</span>
+                            )}
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </AnimatePresence>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -623,7 +662,7 @@ export function FarmerPortal() {
 
       </div>
 
-      {/* Add Crop Modal */}
+      {/* Add Crop Modal (Wired to Real DB) */}
       {isAddingCrop && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsAddingCrop(false)} />
@@ -668,8 +707,8 @@ export function FarmerPortal() {
               </div>
 
               <div className="pt-4">
-                <button type="submit" className="w-full py-3.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/30">
-                  Publish Listing
+                <button disabled={isSubmitting} type="submit" className="w-full py-3.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/30 disabled:opacity-70">
+                  {isSubmitting ? 'Saving...' : 'Publish Listing'}
                 </button>
               </div>
             </form>

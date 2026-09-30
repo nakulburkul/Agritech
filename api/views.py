@@ -5,8 +5,14 @@ import requests
 import pandas as pd
 import numpy as np
 import urllib3
+from datetime import datetime
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import authenticate
+from .models import UserProfile
+from django.contrib.auth.models import User
+from django.core.cache import cache
+from .models import UserProfile, CropListing, Offer, CustomerDemand
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -35,50 +41,102 @@ def prep_features(df):
 
     return pd.merge(seasonal, stages, on='farm_id')
 
-# District alias map for APMC data.gov.in database consistency
-DISTRICT_ALIAS = {
-    "mumbai suburban": "Mumbai",
-    "mumbai city": "Mumbai",
-    "chhatrapati sambhajinagar": "Aurangabad",
-    "dharashiv": "Osmanabad"
-}
+# --- AGMARKNET SCRAPER FALLBACK ---
+def fetch_agmarknet_fallback(state_name, district_name):
+    try:
+        today = datetime.now().strftime("%d-%b-%Y")
+        # Agmarknet uses state codes. Expand this dictionary if you add more states later.
+        state_code = "MH" if state_name.lower() == "maharashtra" else "0"
+
+        # Direct GET request URL to Agmarknet's daily report table
+        url = f"https://agmarknet.gov.in/SearchCmmMkt.aspx?Tx_Commodity=0&Tx_State={state_code}&Tx_District=0&Tx_Market=0&DateFrom={today}&DateTo={today}&Fr_Date={today}&To_Date={today}&Tx_Trend=0&Tx_CommodityHead=--Select--&Tx_StateHead=--Select--&Tx_DistrictHead=--Select--&Tx_MarketHead=--Select--"
+
+        # Fetch with headers to prevent 403 Forbidden blocks
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        response = requests.get(url, headers=headers, timeout=15)
+        
+        # Pandas automatically finds and parses the HTML table into a DataFrame
+        tables = pd.read_html(response.text)
+        if not tables: return []
+        
+        df = tables[0]
+
+        # Filter by district locally to bypass complex Agmarknet District IDs
+        if district_name and district_name.lower() != 'all':
+            # Handle slight case mismatches
+            df = df[df['District Name'].str.lower() == district_name.lower()]
+
+        formatted_data = []
+        for _, row in df.iterrows():
+            # Skip empty/aggregate rows
+            if pd.isna(row.get('Commodity')): continue
+
+            def safe_float(val):
+                try: return float(val)
+                except: return 0.0
+
+            formatted_data.append({
+                "state": state_name,
+                "district": str(row.get('District Name', district_name)),
+                "market": str(row.get('Market Name', 'Local Mandi')),
+                "commodity": str(row.get('Commodity', 'Unknown')),
+                "variety": str(row.get('Variety', 'Unknown')),
+                "min_price": safe_float(row.get('Min Price (Rs./Quintal)', 0)),
+                "max_price": safe_float(row.get('Max Price (Rs./Quintal)', 0)),
+                "modal_price": safe_float(row.get('Modal Price (Rs./Quintal)', 0))
+            })
+
+        return formatted_data
+    except Exception as e:
+        print(f"Agmarknet scraping failed: {e}")
+        return []
+
+def generate_mock_data(state, district):
+    """Generates realistic offline data so the UI never breaks during government outages."""
+    dist = district if district and district.lower() != 'all' else 'Pune'
+    return [
+        {"state": state, "district": dist, "market": f"{dist} Main APMC", "commodity": "Onion", "variety": "Red", "min_price": 1800, "max_price": 2400, "modal_price": 2100},
+        {"state": state, "district": dist, "market": f"{dist} Main APMC", "commodity": "Tomato", "variety": "Local", "min_price": 2500, "max_price": 3500, "modal_price": 3000},
+        {"state": state, "district": dist, "market": f"{dist} Main APMC", "commodity": "Potato", "variety": "Deshi", "min_price": 1500, "max_price": 2000, "modal_price": 1800},
+        {"state": state, "district": dist, "market": f"{dist} Main APMC", "commodity": "Wheat", "variety": "147 Average", "min_price": 2600, "max_price": 3200, "modal_price": 2850},
+        {"state": state, "district": dist, "market": f"{dist} Main APMC", "commodity": "Soyabean", "variety": "Yellow", "min_price": 4200, "max_price": 4800, "modal_price": 4500},
+        {"state": state, "district": dist, "market": f"{dist} Main APMC", "commodity": "Cotton", "variety": "Medium Staple", "min_price": 6500, "max_price": 7200, "modal_price": 6800},
+        {"state": state, "district": dist, "market": f"{dist} Sub Market", "commodity": "Green Chilli", "variety": "Green", "min_price": 3500, "max_price": 4500, "modal_price": 4000},
+        {"state": state, "district": dist, "market": f"{dist} Sub Market", "commodity": "Garlic", "variety": "Average", "min_price": 8000, "max_price": 12000, "modal_price": 10000},
+    ]
 
 def get_live_market_prices(request):
     api_key = "579b464db66ec23bdd00000167acdc452ced438e7cd565361eb22735"
     state = request.GET.get('state', 'Maharashtra')
     raw_district = request.GET.get('district', '').strip()
 
-    district = DISTRICT_ALIAS.get(raw_district.lower(), raw_district)
-
-    base_url = "https://api.data.gov.in/resource/35985678-0d79-46b4-9ed6-6f13308a1d24"
-    params = {
-        "api-key": api_key,
-        "format": "json",
-        "limit": 500,
-        "filters[State]": state
+    DISTRICT_ALIAS = {
+        "mumbai suburban": "Mumbai",
+        "mumbai city": "Mumbai",
+        "chhatrapati sambhajinagar": "Aurangabad",
+        "dharashiv": "Osmanabad"
     }
+    district = DISTRICT_ALIAS.get(raw_district.lower(), raw_district)
     
-    if district and district.lower() != 'all':
-        params["filters[District]"] = district.title()
+    # 1. Check Memory Cache First
+    cache_key = f"market_prices_{state}_{district}".replace(" ", "_")
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return JsonResponse({"status": "success", "count": len(cached_data), "data": cached_data, "source": "cache"})
+
+    # 2. Try Primary Government API
+    base_url = "https://api.data.gov.in/resource/35985678-0d79-46b4-9ed6-6f13308a1d24"
+    params = {"api-key": api_key, "format": "json", "limit": 500, "filters[State]": state}
+    if district and district.lower() != 'all': params["filters[District]"] = district.title()
 
     try:
-        response = requests.get(base_url, params=params, headers={"User-Agent": "Mozilla/5.0"}, verify=False, timeout=15)
+        response = requests.get(base_url, params=params, headers={"User-Agent": "Mozilla/5.0"}, verify=False, timeout=5)
         response.raise_for_status() 
-        api_data = response.json()
-        live_records = api_data.get('records', [])
+        live_records = response.json().get('records', [])
         
-        # If specific district has no arrivals uploaded today, fallback to all Maharashtra
-        if not live_records and district and district.lower() != 'all':
-            fallback_params = {
-                "api-key": api_key,
-                "format": "json",
-                "limit": 500,
-                "filters[State]": state
-            }
-            fb_res = requests.get(base_url, params=fallback_params, headers={"User-Agent": "Mozilla/5.0"}, verify=False, timeout=10)
-            if fb_res.ok:
-                live_records = fb_res.json().get('records', [])
-        
+        if not live_records:
+            raise ValueError("API connected but returned empty records.")
+            
         formatted_data = [{
             "state": item.get('State', 'Unknown'),
             "district": item.get('District', 'Unknown'),
@@ -90,10 +148,25 @@ def get_live_market_prices(request):
             "modal_price": item.get('Modal_Price', 0)
         } for item in live_records]
 
-        return JsonResponse({"status": "success", "count": len(formatted_data), "data": formatted_data})
+        cache.set(cache_key, formatted_data, 3600)
+        return JsonResponse({"status": "success", "count": len(formatted_data), "data": formatted_data, "source": "live_api"})
 
     except Exception as e:
-        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+        print(f"Gov API Failed: {e}. Injecting Offline Fallback Data...")
+        
+        # 3. ULTIMATE FAILSAFE: Offline Mock Data
+        fallback_data = generate_mock_data(state, district)
+        
+        # Cache the mock data for 5 minutes so we don't spam the broken gov API every second
+        cache.set(cache_key, fallback_data, 300) 
+        
+        return JsonResponse({
+            "status": "success", 
+            "count": len(fallback_data), 
+            "data": fallback_data, 
+            "source": "offline_fallback",
+            "message": "Live API down. Showing simulated fallback data."
+        })
 
 
 # --- DETERMINISTIC AI PREDICTOR (Crash-Proofed Data Casting) ---
@@ -201,4 +274,236 @@ def smart_predict(request):
                 ]
             })
     
+    return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
+
+@csrf_exempt
+def api_login(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            username = data.get('username')
+            password = data.get('password')
+            
+            user = authenticate(username=username, password=password)
+            
+            if user is not None:
+                # Check profile, with a fallback to superuser status
+                try:
+                    profile = UserProfile.objects.get(user=user)
+                    if profile.role == 'FARMER':
+                        role = 'farmer'
+                    elif profile.role == 'ADMIN' or user.is_superuser:
+                        role = 'admin'
+                    else:
+                        role = 'customer'
+                except UserProfile.DoesNotExist:
+                    role = 'admin' if user.is_superuser else 'customer'
+                    
+                return JsonResponse({
+                    'status': 'success', 
+                    'role': role, 
+                    'username': user.username
+                })
+            else:
+                return JsonResponse({'status': 'error', 'message': 'Invalid username or password'}, status=401)
+                
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+            
+    return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
+
+@csrf_exempt
+def api_register(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            username = data.get('username')
+            email = data.get('email')
+            password = data.get('password')
+            role = data.get('role', 'customer').upper()
+            location = data.get('location', '')
+
+            # Check if username exists
+            if User.objects.filter(username=username).exists():
+                return JsonResponse({'status': 'error', 'message': 'Username already taken'}, status=400)
+
+            # Create the core Django User
+            user = User.objects.create_user(username=username, email=email, password=password)
+            
+            # Map frontend role to database choices
+            db_role = 'FARMER' if role == 'FARMER' else 'BUYER'
+            
+            # Create the linked Agritech Profile
+            UserProfile.objects.create(user=user, role=db_role, location=location)
+
+            return JsonResponse({'status': 'success', 'message': 'Account created successfully'})
+            
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+            
+    return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def handle_offers(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            buyer = User.objects.get(username=data.get('buyer_username'))
+            crop = CropListing.objects.get(id=data.get('product_id'))
+            
+            Offer.objects.create(
+                crop=crop, buyer=buyer, farmer=crop.farmer.user,
+                proposed_price=data.get('proposed_price'), quantity=data.get('quantity'),
+                transport_arrangement=data.get('transport')
+            )
+            return JsonResponse({'status': 'success', 'message': 'Offer sent!'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+    elif request.method == 'GET':
+        # Now handles BOTH Farmer and Buyer queries
+        farmer_username = request.GET.get('farmer')
+        buyer_username = request.GET.get('buyer')
+        
+        if farmer_username:
+            offers = Offer.objects.filter(farmer__username=farmer_username).order_by('-created_at')
+        elif buyer_username:
+            offers = Offer.objects.filter(buyer__username=buyer_username).order_by('-created_at')
+        else:
+            offers = Offer.objects.none()
+        
+        data = [{
+            'id': o.id,
+            'productId': o.crop.id,
+            'productName': o.crop.crop_name,
+            'buyerId': o.buyer.username,
+            'farmerId': o.farmer.username,
+            'proposedPrice': float(o.proposed_price),
+            'quantity': o.quantity,
+            'transportArrangement': o.transport_arrangement,
+            'status': o.status,
+            'image': 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=150&q=80'
+        } for o in offers]
+        return JsonResponse({'status': 'success', 'data': data})
+
+    elif request.method == 'PATCH':
+        # Used by both Farmer (Accept/Decline) and Buyer (Process Payment)
+        try:
+            data = json.loads(request.body)
+            offer = Offer.objects.get(id=data.get('offer_id'))
+            offer.status = data.get('status') # e.g., 'Accepted', 'Declined', 'Paid'
+            offer.save()
+            return JsonResponse({'status': 'success'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+            
+    return JsonResponse({'status': 'error'}, status=405)
+
+
+@csrf_exempt
+def handle_demands(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            buyer = User.objects.get(username=data.get('buyer_username'))
+            
+            CustomerDemand.objects.create(
+                buyer=buyer, 
+                crop_name=data.get('crop_name'),
+                expected_price=data.get('expected_price'),
+                quantity=data.get('quantity'),
+                description=data.get('description', '')
+            )
+            return JsonResponse({'status': 'success', 'message': 'Demand posted successfully!'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+            
+    elif request.method == 'GET':
+        demands = CustomerDemand.objects.filter(is_active=True).values(
+            'id', 'buyer__username', 'crop_name', 'expected_price', 'quantity', 'description', 'created_at'
+        ).order_by('-created_at')
+        return JsonResponse({'status': 'success', 'data': list(demands)})
+        
+    return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def get_direct_listings(request):
+    if request.method == 'GET':
+        from .models import CropListing
+        # Fetch all active crops from the database
+        listings = CropListing.objects.filter(is_active=True).select_related('farmer__user')
+        
+        data = []
+        for item in listings:
+            # Auto-assign a nice placeholder image based on the category
+            image_url = 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&q=80'
+            if item.category == 'Vegetables':
+                image_url = 'https://images.unsplash.com/photo-1566385101042-1a0aa0c1268c?w=500&q=80'
+            elif item.category == 'Fruits':
+                image_url = 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=500&q=80'
+            elif item.category == 'Grains':
+                image_url = 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=500&q=80'
+
+            data.append({
+                'id': item.id,
+                'name': item.crop_name,
+                'price': float(item.price_per_kg),
+                'stock': item.stock_kg,
+                'location': item.farmer.location,
+                'farmerId': item.farmer.user.username,
+                'image': image_url
+            })
+            
+        return JsonResponse({'status': 'success', 'data': data})
+
+@csrf_exempt
+def manage_inventory(request):
+    if request.method == 'GET':
+        username = request.GET.get('username')
+        try:
+            # Fetch only the crops belonging to the logged-in farmer
+            listings = CropListing.objects.filter(farmer__user__username=username).order_by('-created_at')
+            data = []
+            for item in listings:
+                image_url = 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=150&q=80'
+                if item.category == 'Vegetables': image_url = 'https://images.unsplash.com/photo-1566385101042-1a0aa0c1268c?w=150&q=80'
+                elif item.category == 'Fruits': image_url = 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=150&q=80'
+                elif item.category == 'Grains': image_url = 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=150&q=80'
+
+                data.append({
+                    'id': item.id,
+                    'name': item.crop_name,
+                    'category': item.category,
+                    'price': float(item.price_per_kg),
+                    'stock': item.stock_kg,
+                    'status': 'Active' if item.is_active else 'Inactive',
+                    'image': image_url
+                })
+            return JsonResponse({'status': 'success', 'data': data})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+            
+    elif request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            # Find the farmer's UserProfile
+            farmer_profile = UserProfile.objects.get(user__username=data.get('username'))
+            
+            # Create the new real listing in the database
+            CropListing.objects.create(
+                farmer=farmer_profile,
+                crop_name=data.get('crop_name'),
+                category=data.get('category', 'Vegetables'),
+                price_per_kg=data.get('price'),
+                stock_kg=data.get('stock'),
+                is_active=True
+            )
+            return JsonResponse({'status': 'success', 'message': 'Listing added successfully'})
+        except UserProfile.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Farmer profile not found.'}, status=404)
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+            
     return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
