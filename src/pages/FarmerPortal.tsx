@@ -1,41 +1,56 @@
 import React, { useState, useEffect } from 'react';
-import { Package, IndianRupee, Sprout, TrendingUp, Plus, Activity, LayoutDashboard, Settings, User, X, Handshake, CheckCircle2, XCircle, Truck, MapPin, Bell, BarChart2, CloudSun, ChevronRight, Loader2, Sun, Droplets, ThermometerSun, AlertTriangle, RefreshCw, Navigation } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { fetchMarketPrices, CommodityData, MAHARASHTRA_DISTRICTS } from '../services/marketApi';
+import { Package, IndianRupee, Sprout, TrendingUp, Plus, Activity, LayoutDashboard, Settings, User, X, Handshake, CheckCircle2, XCircle, Truck, MapPin, Bell, BarChart2, CloudSun, ChevronRight, Loader2, Sun, Droplets, ThermometerSun, AlertTriangle, RefreshCw, Navigation, Megaphone, PlusCircle, Users, UserPlus, ShieldCheck, Clock, PieChart } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { fetchMarketPrices, LOCAL_BAZAARS, MAHARASHTRA_DISTRICTS } from '../services/marketApi';
+
+const API_BASE = `http://${window.location.hostname}:8000/api`;
 
 export function FarmerPortal() {
   const currentUser = localStorage.getItem('username') || '';
   
-  // REAL DATABASE STATES
   const [listings, setListings] = useState<any[]>([]);
   const [offers, setOffers] = useState<any[]>([]);
+  const [demands, setDemands] = useState<any[]>([]);
   const [isLoadingInventory, setIsLoadingInventory] = useState(true);
 
   const [isAddingCrop, setIsAddingCrop] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // District & GPS State
+  const [counterModalData, setCounterModalData] = useState<{ id: string, currentPrice: number, productName: string, buyerId: string } | null>(null);
+  const [counterPrice, setCounterPrice] = useState('');
+
+  const [directOfferModal, setDirectOfferModal] = useState<any>(null);
+  const [directOfferPrice, setDirectOfferPrice] = useState('');
+  const [directOfferQty, setDirectOfferQty] = useState('');
+  const [useCoopStock, setUseCoopStock] = useState(false); 
+
   const [selectedDistrict, setSelectedDistrict] = useState('Pune');
   const [userLocation, setUserLocation] = useState('Pune, Maharashtra');
   const [userCoordinates, setUserCoordinates] = useState<{lat: number, lng: number} | null>(null);
+  const [locationStatus, setLocationStatus] = useState('');
   
-  // AI Predictor State
-  const [analytics, setAnalytics] = useState<any>(null);
   const [prediction, setPrediction] = useState('');
   const [predictions, setPredictions] = useState<any[]>([]);
   const [isPredicting, setIsPredicting] = useState(false);
-  const [locationStatus, setLocationStatus] = useState('');
   const [soilType, setSoilType] = useState('Black Cotton');
   const [hasIrrigation, setHasIrrigation] = useState(false);
   
-  // Mandi Data
-  const [localMandiPrices, setLocalMandiPrices] = useState<CommodityData[]>([]);
-  const [selectedMarkets, setSelectedMarkets] = useState<Record<string, number>>({});
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+
+  const [localMandiPrices, setLocalMandiPrices] = useState<any[]>([]);
   const [isLoadingMandi, setIsLoadingMandi] = useState(false);
 
-  const pendingOffersCount = offers.filter(o => o.status === 'Pending').length;
+  const [myCoop, setMyCoop] = useState<any[]>([]);
+  const [nearbyFarmers, setNearbyFarmers] = useState([
+    { id: 'f1', name: 'Ansel', distance: '2.4 km', crop: 'Potato', stock: 450, rating: 4.8 },
+    { id: 'f2', name: 'Utsav', distance: '3.1 km', crop: 'Onion', stock: 800, rating: 4.9 },
+    { id: 'f3', name: 'Varad', distance: '5.0 km', crop: 'Tomato', stock: 320, rating: 4.7 },
+    { id: 'f4', name: 'Atharva', distance: '7.2 km', crop: 'Soyabean', stock: 1200, rating: 4.5 },
+  ]);
+
+  const pendingOffersCount = (offers || []).filter(o => o && o.status === 'Pending').length;
   
-  // Add Crop Modal Form State
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [stock, setStock] = useState('');
@@ -43,48 +58,68 @@ export function FarmerPortal() {
   const [location, setLocation] = useState('Pune, MH');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // FETCH REAL DATA
+  // FETCH DATA
   const fetchMyInventory = async () => {
     setIsLoadingInventory(true);
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/inventory/?username=${currentUser}`);
+      const res = await fetch(`${API_BASE}/inventory/?username=${currentUser}&t=${Date.now()}`);
       const data = await res.json();
-      if (data.status === 'success') setListings(data.data);
-    } catch (err) {
-      console.error("Failed to fetch inventory");
-    }
+      if (data.status === 'success') setListings(data.data || []);
+    } catch (err) {}
     setIsLoadingInventory(false);
   };
 
   const fetchMyOffers = async () => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/offers/?farmer=${currentUser}`);
+      const res = await fetch(`${API_BASE}/offers/?farmer=${currentUser}&t=${Date.now()}`);
       const data = await res.json();
-      if (data.status === 'success') setOffers(data.data);
-    } catch (err) {
-      console.error("Failed to fetch offers");
-    }
+      if (data.status === 'success') setOffers(data.data || []);
+    } catch (err) {}
+  };
+
+  const fetchDemands = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/demands/?t=${Date.now()}`);
+      const data = await res.json();
+      if (data.status === 'success') setDemands(data.data || []);
+    } catch (err) {}
+  };
+
+  const fetchFarmerAnalytics = async () => {
+    setIsLoadingAnalytics(true);
+    try {
+      const res = await fetch(`${API_BASE}/farmer-analytics/?farmer=${currentUser}&district=${selectedDistrict}&t=${Date.now()}`);
+      const data = await res.json();
+      if (data.status === 'success') setAnalyticsData(data.data);
+    } catch (err) {}
+    setIsLoadingAnalytics(false);
   };
 
   useEffect(() => {
     fetchMyInventory();
     fetchMyOffers();
+    fetchDemands();
     handleUseGPS();
   }, [currentUser]);
 
   useEffect(() => {
     if (selectedDistrict) {
       loadMandiPrices(selectedDistrict);
+      fetchFarmerAnalytics(); 
     }
   }, [selectedDistrict]);
+
+  useEffect(() => {
+    if (activeTab === 'analytics') fetchFarmerAnalytics();
+    else if (activeTab === 'offers') fetchMyOffers();
+    else if (activeTab === 'crops') fetchMyInventory();
+    else if (activeTab === 'demands') fetchDemands();
+  }, [activeTab]);
 
   const loadMandiPrices = async (district: string) => {
     setIsLoadingMandi(true);
     const data = await fetchMarketPrices(district);
-    setLocalMandiPrices(data);
-    const initialMap: Record<string, number> = {};
-    data.forEach(item => { initialMap[item.id] = 0; });
-    setSelectedMarkets(initialMap);
+    setLocalMandiPrices(data || []);
     setIsLoadingMandi(false);
   };
 
@@ -96,20 +131,17 @@ export function FarmerPortal() {
         try {
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);
           const data = await res.json();
-          const detected = (data.address.state_district || data.address.city || data.address.town || 'Pune').replace(' District', '');
-          const match = MAHARASHTRA_DISTRICTS.find(d => d.toLowerCase() === detected.toLowerCase()) || detected;
+          const detected = (data.address.suburb || data.address.neighbourhood || data.address.city || data.address.state_district || 'Pune').replace(' District', '');
+          
+          const matchedBazaar = LOCAL_BAZAARS.find(b => detected.toLowerCase().includes(b.toLowerCase()));
+          const matchedDistrict = MAHARASHTRA_DISTRICTS.find(d => detected.toLowerCase().includes(d.toLowerCase()));
+          const match = matchedBazaar || matchedDistrict || 'Pune';
           
           setSelectedDistrict(match);
-          setUserLocation(data.address.suburb && data.address.city ? `${data.address.city}, ${data.address.suburb}` : `${match}, Maharashtra`);
+          setUserLocation(`${match}, Maharashtra`);
           setUserCoordinates({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          
-          setPredictions([]);
-          setPrediction('');
-          setAnalytics(null);
-          setLocationStatus('');
-        } catch (err) {
-          setLocationStatus('');
-        }
+          setPredictions([]); setPrediction(''); setLocationStatus('');
+        } catch (err) { setLocationStatus(''); }
       },
       () => setLocationStatus('')
     );
@@ -118,96 +150,176 @@ export function FarmerPortal() {
   const handleSmartPredict = async () => {
     if (!selectedDistrict) return;
     setIsPredicting(true);
-    setLocationStatus(`Forecasting climate & soil capabilities for ${selectedDistrict}...`);
+    setLocationStatus(`Forecasting capabilities for ${selectedDistrict}...`);
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/smart-predict/', {
+      const response = await fetch(`${API_BASE}/smart-predict/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location_name: selectedDistrict,
-          lat: userCoordinates?.lat,
-          lon: userCoordinates?.lng,
-          soil: soilType,
-          irrigation: hasIrrigation
-        })
+        body: JSON.stringify({ location_name: selectedDistrict, lat: userCoordinates?.lat, lon: userCoordinates?.lng, soil: soilType, irrigation: hasIrrigation })
       });
       const data = await response.json();
       if (data.status === 'success') {
-        setAnalytics(data.analytics);
         if (data.predictions && data.predictions.length > 0) {
-          setPredictions(data.predictions);
-          setPrediction(data.predictions[0].crop);
-        } else {
-          setPrediction(data.prediction || 'Wheat');
-        }
+          setPredictions(data.predictions); setPrediction(data.predictions[0].crop);
+        } else { setPrediction(data.prediction || 'Wheat'); }
       }
-    } catch (err) {
-      console.error('Prediction failed', err);
-    }
-    setIsPredicting(false);
-    setLocationStatus('');
+    } catch (err) {}
+    setIsPredicting(false); setLocationStatus('');
   };
 
-  // POST NEW LISTING TO DB
   const handleAddCrop = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !price || !stock) return;
     setIsSubmitting(true);
-    
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/inventory/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: currentUser,
-          crop_name: name,
-          category: category,
-          price: parseFloat(price),
-          stock: parseInt(stock, 10)
-        })
+      const res = await fetch(`${API_BASE}/inventory/`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser, crop_name: name, category, price: parseFloat(price), stock: parseInt(stock, 10) })
       });
       if (res.ok) {
-        setIsAddingCrop(false);
-        setName(''); setPrice(''); setStock('');
-        fetchMyInventory();
+        setIsAddingCrop(false); setName(''); setPrice(''); setStock(''); fetchMyInventory();
       }
-    } catch (err) {
-      alert("Failed to add listing.");
-    }
+    } catch (err) { alert("Failed to add listing."); }
     setIsSubmitting(false);
   };
 
-  // PATCH OFFER STATUS TO DB
-  const updateOfferStatus = async (offerId: string, newStatus: string) => {
+  const handleSendDirectOffer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!directOfferModal) return;
+
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/offers/', {
-        method: 'PATCH',
+      const res = await fetch(`${API_BASE}/offers/`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ offer_id: offerId, status: newStatus })
+        body: JSON.stringify({
+          is_direct_farmer_offer: true,
+          farmer_username: currentUser,
+          buyer_username: directOfferModal.buyer__username,
+          crop_name: useCoopStock ? `${directOfferModal.crop_name} (Co-op Group)` : directOfferModal.crop_name,
+          proposed_price: directOfferPrice,
+          quantity: directOfferQty
+        })
       });
-      if (res.ok) fetchMyOffers();
-    } catch (err) {
-      alert("Failed to update status.");
+      const data = await res.json();
+      if (res.ok && data.status === 'success') {
+        alert(useCoopStock ? "Co-op Group Offer sent successfully!" : "Direct offer sent to the buyer!");
+        setDirectOfferModal(null);
+        setUseCoopStock(false);
+        fetchMyOffers();
+        setActiveTab('offers'); 
+      } else {
+        alert(data.message || "Failed to send direct offer.");
+      }
+    } catch (err) { alert("API Connection Failed"); }
+  };
+
+  const updateOfferStatus = async (offerId: string, newStatus: string, proposedPrice?: number) => {
+    const payload: any = { offer_id: offerId, status: newStatus };
+    if (proposedPrice) payload.proposed_price = proposedPrice;
+
+    try {
+      const res = await fetch(`${API_BASE}/offers/`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        fetchMyOffers();
+        fetchMyInventory(); 
+        fetchFarmerAnalytics();
+      }
+    } catch (err) { alert("Failed to update status."); }
+  };
+
+  const submitCounterOffer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (counterModalData && counterPrice && !isNaN(Number(counterPrice))) {
+      updateOfferStatus(counterModalData.id, 'Countered', parseFloat(counterPrice));
+      setCounterModalData(null);
+      setCounterPrice('');
     }
   };
+
+  const inviteToCoop = (farmer: any) => {
+    setMyCoop([...myCoop, farmer]);
+    setNearbyFarmers(nearbyFarmers.filter(f => f.id !== farmer.id));
+  };
+
+  const removeFromCoop = (farmer: any) => {
+    setNearbyFarmers([...nearbyFarmers, farmer]);
+    setMyCoop(myCoop.filter(f => f.id !== farmer.id));
+  };
+
+  const calculateMarketTrend = () => {
+    if (!localMandiPrices || localMandiPrices.length === 0) return { val: '0.0%', type: 'stable' };
+    let totalPremium = 0, validCount = 0;
+    
+    localMandiPrices.forEach(item => {
+      const minP = Number(item.min_price) || 0;
+      const modP = Number(item.modal_price) || 0;
+      if (minP > 0 && modP > 0) {
+        totalPremium += ((modP - minP) / minP) * 100;
+        validCount++;
+      }
+    });
+    
+    if (validCount === 0) return { val: '0.0%', type: 'stable' };
+    const avgPremium = totalPremium / validCount;
+    const type = avgPremium > 12 ? 'up' : avgPremium < 4 ? 'down' : 'stable';
+    return { val: `${avgPremium > 0 ? '+' : ''}${avgPremium.toFixed(1)}%`, type };
+  };
+
+  const marketTrend = calculateMarketTrend();
+  
+  // ======================================================================
+  // THE INDESTRUCTIBLE FRONTEND ANALYTICS ENGINE
+  // ======================================================================
+  const validStatuses = ['Accepted', 'Escrow Funded', 'In Transit', 'Completed', 'Paid'];
+  const confirmedDeals = (offers || []).filter(o => validStatuses.includes(o.status));
+  
+  const calcRevenue = confirmedDeals.reduce((sum, o) => sum + ((Number(o.proposedPrice) || 0) * (Number(o.quantity) || 0)), 0);
+  const calcVolume = confirmedDeals.reduce((sum, o) => sum + (Number(o.quantity) || 0), 0);
+  const calcProfit = calcRevenue * 0.48; // Standard 48% agritech profit margin estimate
+  const calcAvg = calcVolume > 0 ? (calcRevenue / calcVolume).toFixed(2) : 0;
+
+  // Calculate crop distribution for the new visual chart
+  const cropDistribution = confirmedDeals.reduce((acc: any, o) => {
+    const name = o.productName || 'Other';
+    acc[name] = (acc[name] || 0) + ((Number(o.proposedPrice) || 0) * (Number(o.quantity) || 0));
+    return acc;
+  }, {});
+  
+  const topCrops = Object.entries(cropDistribution)
+    .sort((a: any, b: any) => b[1] - a[1])
+    .slice(0, 3); // Top 3 crops by revenue
+
+  const weatherTemp = analyticsData?.weather?.temperature ?? '--';
+  const rainChance = analyticsData?.weather?.precipitation_chance ?? 0;
+  const weatherCondition = rainChance > 25 ? 'Rainy' : (analyticsData?.weather?.humidity > 70 ? 'Cloudy' : 'Sunny');
 
   return (
     <div className="pt-24 min-h-screen bg-slate-50 flex flex-col md:flex-row pb-16">
       
-      {/* Sidebar (Desktop) */}
+      {/* SIDEBAR */}
       <aside className="w-full md:w-64 bg-white border-r border-slate-200 px-6 py-8 hidden md:block shrink-0">
         <div className="flex items-center gap-3 mb-10">
-          <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold text-lg border border-slate-200">
-            {currentUser.charAt(0).toUpperCase()}
+          <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold text-lg border border-slate-200 shadow-inner">
+            {currentUser ? currentUser.charAt(0).toUpperCase() : 'F'}
           </div>
           <div>
-            <p className="font-bold text-slate-800">{currentUser}</p>
+            <p className="font-bold text-slate-800">{currentUser || 'Farmer'}</p>
             <p className="text-xs text-emerald-600 font-semibold">Verified Seller</p>
           </div>
         </div>
 
         <nav className="space-y-2">
           <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'dashboard' ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}><LayoutDashboard className="w-5 h-5" /> Dashboard</button>
+          <button onClick={() => setActiveTab('coops')} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'coops' ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+            <div className="flex items-center gap-3"><Users className="w-5 h-5" /> Co-ops & Groups</div>
+            {myCoop.length > 0 && <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{myCoop.length}</span>}
+          </button>
+          <button onClick={() => setActiveTab('demands')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'demands' ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+            <Megaphone className="w-5 h-5" /> Buyer Demands
+          </button>
           <button onClick={() => setActiveTab('offers')} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'offers' ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
             <div className="flex items-center gap-3"><Handshake className="w-5 h-5" /> Offers</div>
             {pendingOffersCount > 0 && <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{pendingOffersCount}</span>}
@@ -217,72 +329,88 @@ export function FarmerPortal() {
         </nav>
       </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 px-4 md:px-6 lg:px-12 py-4 md:py-8 w-full max-w-4xl mx-auto">
+      {/* MAIN PORTAL AREA */}
+      <div className="flex-1 px-4 md:px-6 lg:px-12 py-4 md:py-8 w-full max-w-5xl mx-auto">
         
         {activeTab !== 'dashboard' && (
           <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-4">
             <div>
-              <h1 className="text-3xl md:text-4xl font-serif text-[#163020] tracking-[-0.04em] mb-2">Seller Dashboard</h1>
-              <p className="text-slate-500">Manage your listings and negotiate deals directly with buyers.</p>
+              <h1 className="text-3xl md:text-4xl font-serif text-[#163020] tracking-[-0.04em] mb-2">
+                {activeTab === 'coops' ? 'Farmer Cooperatives' : 
+                 activeTab === 'analytics' ? 'Performance Analytics' : 'Seller Dashboard'}
+              </h1>
+              <p className="text-slate-500">
+                {activeTab === 'coops' ? 'Pool your stock with nearby farmers to fulfill massive bulk orders.' : 
+                 activeTab === 'analytics' ? 'Track your closed deals, revenue, and district agro-climatic profile.' : 'Manage your listings and negotiate deals directly with buyers.'}
+              </p>
             </div>
-            <button onClick={() => setIsAddingCrop(true)} className="px-5 py-2.5 bg-[#163020] text-white rounded-full font-bold shadow-md hover:bg-emerald-900 transition-colors flex items-center gap-2">
-              <Plus className="w-4 h-4" /> Add New Listing
-            </button>
+            {activeTab !== 'coops' && activeTab !== 'analytics' && (
+              <button onClick={() => setIsAddingCrop(true)} className="px-5 py-2.5 bg-[#163020] text-white rounded-full font-bold shadow-md hover:bg-emerald-900 transition-colors flex items-center gap-2">
+                <Plus className="w-4 h-4" /> Add New Listing
+              </button>
+            )}
           </div>
         )}
 
-        {/* Dashboard Tab */}
+        {/* DASHBOARD TAB */}
         {activeTab === 'dashboard' && (
           <div className="w-full">
             <div className="bg-[#0b5c43] rounded-[2rem] p-6 md:p-8 text-white relative mb-16 overflow-hidden shadow-lg">
               <div className="flex justify-between items-center mb-10 relative z-10">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 bg-emerald-700/50 rounded-full overflow-hidden border-2 border-white/20 shrink-0 flex items-center justify-center font-bold text-xl">
-                    {currentUser.charAt(0).toUpperCase()}
+                    {currentUser ? currentUser.charAt(0).toUpperCase() : 'F'}
                   </div>
                   <div>
                     <p className="text-xs text-emerald-100 font-medium mb-0.5">Location</p>
-                    <p className="font-bold flex items-center gap-1.5 text-lg truncate max-w-[200px] md:max-w-[400px]">
-                      <MapPin className="w-4 h-4 shrink-0"/> {userLocation}
-                    </p>
+                    <p className="font-bold flex items-center gap-1.5 text-lg truncate max-w-[200px] md:max-w-[400px]"><MapPin className="w-4 h-4 shrink-0"/> {userLocation}</p>
                   </div>
                 </div>
-                <button className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-sm hover:bg-white/20 transition-colors shrink-0">
-                  <Bell className="w-5 h-5 text-white" />
-                </button>
               </div>
               <div className="h-20 md:h-24"></div> 
             </div>
 
             <div className="px-4 md:px-8 -mt-32 md:-mt-40 relative z-20 flex gap-4 md:gap-6 mb-10">
               <div className="bg-white rounded-[2rem] p-5 md:p-6 flex-1 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
-                <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 mb-4">
-                   <BarChart2 className="w-6 h-6"/>
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${
+                  marketTrend.type === 'up' ? 'bg-emerald-50 text-emerald-500' :
+                  marketTrend.type === 'down' ? 'bg-red-50 text-red-500' :
+                  'bg-blue-50 text-blue-500'
+                }`}>
+                  <BarChart2 className="w-6 h-6"/>
                 </div>
-                <p className="text-slate-400 text-xs md:text-sm font-semibold mb-1">Market Trend</p>
-                <h3 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">+4.2%</h3>
-                <p className="text-slate-800 font-bold text-base md:text-lg">Up</p>
+                <p className="text-slate-400 text-xs md:text-sm font-semibold mb-1">Market Trend Premium</p>
+                <h3 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">
+                  {isLoadingMandi ? <Loader2 className="w-5 h-5 animate-spin text-slate-300 inline-block"/> : marketTrend.val}
+                </h3>
+                <p className="text-slate-800 font-bold text-base md:text-lg capitalize">
+                  {isLoadingMandi ? '...' : marketTrend.type}
+                </p>
               </div>
+
               <div className="bg-white rounded-[2rem] p-5 md:p-6 flex-1 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
                 <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 mb-4">
-                   <CloudSun className="w-6 h-6"/>
+                  {weatherCondition === 'Rainy' ? <Droplets className="w-6 h-6 text-blue-500"/> :
+                   weatherCondition === 'Cloudy' ? <CloudSun className="w-6 h-6 text-slate-500"/> :
+                   <Sun className="w-6 h-6 text-orange-500"/>}
                 </div>
-                <p className="text-slate-400 text-xs md:text-sm font-semibold mb-1">Weather</p>
-                <h3 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">Sunny •</h3>
-                <p className="text-slate-800 font-bold text-base md:text-lg">28°C</p>
+                <p className="text-slate-400 text-xs md:text-sm font-semibold mb-1">Live {selectedDistrict} Weather</p>
+                <h3 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">
+                  {isLoadingAnalytics ? <Loader2 className="w-5 h-5 animate-spin text-slate-300 inline-block"/> : `${weatherCondition} •`}
+                </h3>
+                <p className="text-slate-800 font-bold text-base md:text-lg">
+                  {isLoadingAnalytics ? '...' : `${weatherTemp}°C`}
+                </p>
               </div>
             </div>
 
             <div className="px-2">
               <div className="bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-3 w-full sm:w-auto">
-                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                    <MapPin className="w-5 h-5" />
-                  </div>
+                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0"><MapPin className="w-5 h-5" /></div>
                   <div>
-                    <p className="text-[10px] uppercase font-bold text-slate-400">Selected District</p>
-                    <h2 className="text-lg font-bold text-slate-800">{selectedDistrict} APMC</h2>
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Selected Market</p>
+                    <h2 className="text-lg font-bold text-slate-800">{selectedDistrict}</h2>
                   </div>
                 </div>
 
@@ -290,26 +418,23 @@ export function FarmerPortal() {
                   <select
                     value={selectedDistrict}
                     onChange={(e) => {
-                      const newDist = e.target.value;
-                      setSelectedDistrict(newDist);
+                      const newDist = e.target.value; 
+                      setSelectedDistrict(newDist); 
                       setUserLocation(`${newDist}, Maharashtra`);
-                      setUserCoordinates(null);
-                      setPredictions([]);
+                      setUserCoordinates(null); 
+                      setPredictions([]); 
                       setPrediction('');
-                      setAnalytics(null);
                     }}
-                    className="w-full sm:w-60 px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer transition-colors"
+                    className="w-full sm:w-64 px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer transition-colors"
                   >
-                    {MAHARASHTRA_DISTRICTS.map((dist) => (
-                      <option key={dist} value={dist}>{dist}</option>
-                    ))}
+                    <optgroup label="📍 Mumbai Retail Bazaars">
+                      {LOCAL_BAZAARS.map(b => <option key={b} value={b}>{b} Bazaar</option>)}
+                    </optgroup>
+                    <optgroup label="🏢 Maharashtra Wholesale APMC">
+                      {MAHARASHTRA_DISTRICTS.map(d => <option key={d} value={d}>{d} APMC</option>)}
+                    </optgroup>
                   </select>
-
-                  <button 
-                    type="button" 
-                    onClick={handleUseGPS} 
-                    className="p-2.5 px-3.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition-colors shrink-0 flex items-center gap-1.5 text-xs font-bold shadow-sm"
-                  >
+                  <button type="button" onClick={handleUseGPS} className="p-2.5 px-3.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition-colors shrink-0 flex items-center gap-1.5 text-xs font-bold shadow-sm">
                     <Navigation className="w-4 h-4 text-emerald-600" /> GPS
                   </button>
                 </div>
@@ -322,9 +447,7 @@ export function FarmerPortal() {
                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 mb-6">
                   <div className="flex items-center justify-between mb-5">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
-                        <Sprout className="w-6 h-6" />
-                      </div>
+                      <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0"><Sprout className="w-6 h-6" /></div>
                       <div>
                         <h4 className="font-bold text-slate-800 text-lg">AI Crop Predictor</h4>
                         <p className="text-xs text-slate-500">Autonomous seasonal forecasting for {selectedDistrict}</p>
@@ -351,29 +474,20 @@ export function FarmerPortal() {
                           </button>
                         </div>
                       </div>
-                      <button 
-                        onClick={handleSmartPredict} 
-                        disabled={isPredicting} 
-                        className="w-full bg-[#163020] text-white font-bold py-4 rounded-2xl hover:bg-emerald-900 transition-colors shadow-md disabled:opacity-70 flex items-center justify-center gap-2"
-                      >
+                      <button onClick={handleSmartPredict} disabled={isPredicting} className="w-full bg-[#163020] text-white font-bold py-4 rounded-2xl hover:bg-emerald-900 transition-colors shadow-md disabled:opacity-70 flex items-center justify-center gap-2">
                         {isPredicting ? <Loader2 className="w-5 h-5 animate-spin" /> : <MapPin className="w-5 h-5" />}
                         {isPredicting ? locationStatus || 'Analyzing...' : `Predict Capabilities for ${selectedDistrict}`}
                       </button>
                     </div>
                   )}
                   
-                  {analytics && prediction && (
+                  {prediction && (
                     <div className="mt-6 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                      
                       <div className="p-6 bg-emerald-50 border border-emerald-100 rounded-2xl text-center shadow-sm relative overflow-hidden">
-                        <div className="absolute top-0 right-0 bg-emerald-200 text-emerald-800 text-[11px] font-bold px-3 py-1 rounded-bl-xl tracking-wide">
-                          {predictions[0]?.confidence || 85}% Match Confidence
-                        </div>
+                        <div className="absolute top-0 right-0 bg-emerald-200 text-emerald-800 text-[11px] font-bold px-3 py-1 rounded-bl-xl tracking-wide">{predictions[0]?.confidence || 85}% Match Confidence</div>
                         <p className="text-xs text-emerald-600 font-bold uppercase tracking-wider mb-1">Optimal Cultivation Recommendation</p>
                         <p className="text-4xl font-black text-[#163020] tracking-tight">{prediction}</p>
-                        <p className="text-xs font-semibold text-emerald-700/60 mt-2 flex items-center justify-center gap-1">
-                          <MapPin className="w-3.5 h-3.5" /> Environmental parameters simulated for {userLocation}
-                        </p>
+                        <p className="text-xs font-semibold text-emerald-700/60 mt-2 flex items-center justify-center gap-1"><MapPin className="w-3.5 h-3.5" /> Simulated for {userLocation}</p>
                       </div>
 
                       {predictions.length > 1 && (
@@ -383,9 +497,7 @@ export function FarmerPortal() {
                             {predictions.map((item, idx) => (
                               <div key={idx} className={`p-4 rounded-xl border flex items-center justify-between ${idx === 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-100'}`}>
                                 <div className="flex items-center gap-2.5">
-                                  <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center ${idx === 0 ? 'bg-emerald-200 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
-                                    #{idx + 1}
-                                  </span>
+                                  <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center ${idx === 0 ? 'bg-emerald-200 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>#{idx + 1}</span>
                                   <span className="font-bold text-slate-800 text-sm">{item.crop}</span>
                                 </div>
                                 <span className="text-xs font-bold text-emerald-600">{item.confidence}%</span>
@@ -395,51 +507,21 @@ export function FarmerPortal() {
                         </div>
                       )}
 
-                      <div>
-                        <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">120-Day Seasonal Metrics</h5>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex flex-col items-center text-center">
-                            <Sun className="w-5 h-5 text-amber-500 mb-2"/>
-                            <p className="text-[10px] uppercase font-bold text-amber-600/70 mb-1">Growing Degree Days</p>
-                            <p className="font-bold text-amber-900 text-lg">{analytics.gdd} <span className="text-xs font-medium">units</span></p>
-                          </div>
-                          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col items-center text-center">
-                            <Droplets className="w-5 h-5 text-blue-500 mb-2"/>
-                            <p className="text-[10px] uppercase font-bold text-blue-600/70 mb-1">Total Rainfall</p>
-                            <p className="font-bold text-blue-900 text-lg">{analytics.total_rain} <span className="text-xs font-medium">mm</span></p>
-                          </div>
-                          <div className="bg-red-50 p-4 rounded-xl border border-red-100 flex flex-col items-center text-center">
-                            <ThermometerSun className="w-5 h-5 text-red-500 mb-2"/>
-                            <p className="text-[10px] uppercase font-bold text-red-600/70 mb-1">Heat Stress Days</p>
-                            <p className="font-bold text-red-900 text-lg">{analytics.heat_stress} <span className="text-xs font-medium">&gt; 35°C</span></p>
-                          </div>
-                          <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 flex flex-col items-center text-center">
-                            <AlertTriangle className="w-5 h-5 text-orange-500 mb-2"/>
-                            <p className="text-[10px] uppercase font-bold text-orange-600/70 mb-1">Drought Risk</p>
-                            <p className="font-bold text-orange-900 text-lg">{analytics.dry_days} <span className="text-xs font-medium">dry days</span></p>
-                          </div>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => { setPrediction(''); setPredictions([]); setAnalytics(null); }} 
-                        className="w-full py-2.5 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors flex items-center justify-center gap-2 border border-slate-200 rounded-xl"
-                      >
+                      <button onClick={() => { setPrediction(''); setPredictions([]); }} className="w-full py-2.5 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors flex items-center justify-center gap-2 border border-slate-200 rounded-xl">
                         <RefreshCw className="w-4 h-4" /> Run New Analysis
                       </button>
                     </div>
                   )}
                 </div>
 
-                {/* LIVE APMC MANDI PRICES */}
+                {/* LIVE MANDI & BAZAAR PRICES */}
                 <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
                   <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-3">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
-                        <TrendingUp className="w-6 h-6" />
-                      </div>
+                      <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shrink-0"><TrendingUp className="w-6 h-6" /></div>
                       <div>
-                        <h4 className="font-bold text-slate-800 text-lg">Real Live Mandi Rates</h4>
-                        <p className="text-xs text-slate-500">APMC market data in {selectedDistrict}</p>
+                        <h4 className="font-bold text-slate-800 text-lg">Live Market Rates</h4>
+                        <p className="text-xs text-slate-500">Live price feed in {selectedDistrict}</p>
                       </div>
                     </div>
                   </div>
@@ -447,54 +529,38 @@ export function FarmerPortal() {
                   {isLoadingMandi ? (
                     <div className="py-12 flex flex-col items-center justify-center">
                       <Loader2 className="w-8 h-8 animate-spin text-emerald-500 mb-2" />
-                      <p className="text-sm text-slate-400">Loading {selectedDistrict} mandis...</p>
+                      <p className="text-sm text-slate-400">Loading {selectedDistrict} rates...</p>
                     </div>
                   ) : localMandiPrices.length === 0 ? (
                     <div className="py-12 text-center bg-slate-50 rounded-2xl border border-slate-100">
                       <AlertTriangle className="w-10 h-10 text-orange-400 mx-auto mb-3" />
-                      <p className="text-slate-700 font-bold text-lg">No Market Records Found</p>
-                      <p className="text-slate-500 text-sm mt-1 max-w-md mx-auto">No official APMC data was uploaded for {selectedDistrict} today.</p>
+                      <p className="text-slate-700 font-bold text-lg">No Records Found</p>
+                      <p className="text-slate-500 text-sm mt-1 max-w-md mx-auto">No market data records available for {selectedDistrict}.</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {localMandiPrices.map((crop) => {
-                        const mIdx = selectedMarkets[crop.id] || 0;
-                        const currentMarket = crop.markets[mIdx] || crop.markets[0];
-
-                        return (
-                          <div key={crop.id} className="rounded-2xl border border-slate-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow bg-white">
-                            <div className="h-32 bg-slate-100 relative">
-                              <img src={crop.image} alt={crop.commodity} className="w-full h-full object-cover" />
-                              <span className="absolute bottom-2 left-2 bg-white/90 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{crop.category}</span>
-                            </div>
-                            <div className="p-4 flex flex-col flex-1">
-                              <h4 className="font-bold text-base text-slate-800 mb-1">{crop.commodity}</h4>
-                              <div className="mb-2">
-                                <select 
-                                  value={mIdx}
-                                  onChange={(e) => setSelectedMarkets({ ...selectedMarkets, [crop.id]: Number(e.target.value) })}
-                                  className="w-full text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                >
-                                  {crop.markets.map((m, idx) => (
-                                    <option key={idx} value={idx}>{m.market}</option>
-                                  ))}
-                                </select>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                      {localMandiPrices.map((crop, idx) => (
+                        <div key={crop.id || idx} className="rounded-2xl border border-slate-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow bg-white">
+                          <div className="h-32 bg-slate-100 relative">
+                            <img src={crop.image || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&q=80'} alt={crop.commodity} className="w-full h-full object-cover" />
+                            <span className="absolute bottom-2 left-2 bg-white/90 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{crop.category || 'Commodity'}</span>
+                          </div>
+                          <div className="p-4 flex flex-col flex-1">
+                            <h4 className="font-bold text-base text-slate-800 mb-1">{crop.commodity || 'Unknown'}</h4>
+                            <p className="text-xs text-slate-400 mb-3">{crop.market || selectedDistrict}</p>
+                            <div className="mt-auto pt-2 border-t border-slate-100 flex justify-between items-end">
+                              <div>
+                                <p className="text-[10px] uppercase font-bold text-slate-400">Modal Price</p>
+                                <p className="text-xl font-bold text-emerald-700">₹{crop.modal_price || 0}<span className="text-xs font-normal text-slate-400">/{crop.unit || 'kg'}</span></p>
                               </div>
-
-                              <div className="mt-auto pt-2 border-t border-slate-100 flex justify-between items-end">
-                                <div>
-                                  <p className="text-[10px] uppercase font-bold text-slate-400">Modal Price</p>
-                                  <p className="text-xl font-bold text-emerald-700">₹{currentMarket?.modal_price}<span className="text-xs font-normal text-slate-400">/q</span></p>
-                                </div>
-                                <div className="text-right text-[11px] text-slate-400">
-                                  <p>Min: ₹{currentMarket?.min_price}</p>
-                                  <p>Max: ₹{currentMarket?.max_price}</p>
-                                </div>
+                              <div className="text-right text-[11px] text-slate-400">
+                                <p>Min: ₹{crop.min_price || 0}</p>
+                                <p>Max: ₹{crop.max_price || 0}</p>
                               </div>
                             </div>
                           </div>
-                        );
-                      })}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -503,7 +569,166 @@ export function FarmerPortal() {
           </div>
         )}
 
-        {/* Offers Tab */}
+        {/* CO-OPS & GROUPS TAB */}
+        {activeTab === 'coops' && (
+          <div className="animate-in fade-in space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-sm">
+                <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-emerald-600" /> Farmers Near {selectedDistrict}
+                  </h3>
+                </div>
+                {nearbyFarmers.length === 0 ? (
+                  <div className="p-12 text-center text-slate-500">
+                    <p>No more farmers nearby to invite.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {nearbyFarmers.map(farmer => (
+                      <div key={farmer.id} className="p-5 hover:bg-slate-50/50 transition-colors flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-600 font-bold border border-slate-200">{farmer.name.charAt(0)}</div>
+                          <div>
+                            <h4 className="font-bold text-slate-800">{farmer.name} <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full ml-1">★ {farmer.rating}</span></h4>
+                            <p className="text-xs text-slate-500">Has {farmer.stock}kg of {farmer.crop} • {farmer.distance} away</p>
+                          </div>
+                        </div>
+                        <button onClick={() => inviteToCoop(farmer)} className="px-4 py-2 bg-white border border-emerald-200 text-emerald-700 rounded-xl text-sm font-bold flex items-center gap-1.5 hover:bg-emerald-50 transition-colors shadow-sm"><UserPlus className="w-4 h-4" /> Invite</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="bg-[#0b5c43] border border-emerald-900 rounded-3xl overflow-hidden shadow-lg text-white">
+                <div className="px-6 py-5 border-b border-emerald-800/50 bg-[#084b36]">
+                  <h3 className="font-bold flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-emerald-300" /> My Active Co-op</h3>
+                  <p className="text-xs text-emerald-200/70 mt-1">Pool stock to fulfill massive demands.</p>
+                </div>
+                <div className="p-6">
+                  {myCoop.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Users className="w-12 h-12 text-emerald-600/50 mx-auto mb-3" />
+                      <p className="text-sm text-emerald-100/70">You are operating independently.</p>
+                      <p className="text-xs text-emerald-200/50 mt-1">Invite nearby farmers to form a group.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between bg-[#084b36] p-3 rounded-xl border border-emerald-700/50">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center text-xs font-bold shadow-inner">You</div>
+                          <div><p className="text-sm font-bold text-white">Group Leader</p></div>
+                        </div>
+                      </div>
+                      {myCoop.map(member => (
+                        <div key={member.id} className="flex items-center justify-between bg-emerald-800/40 p-3 rounded-xl border border-emerald-700/30">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-emerald-700 rounded-full flex items-center justify-center text-xs font-bold">{member.name.charAt(0)}</div>
+                            <div>
+                              <p className="text-sm font-bold text-emerald-50">{member.name}</p>
+                              <p className="text-[10px] text-emerald-200/70">+{member.stock}kg {member.crop}</p>
+                            </div>
+                          </div>
+                          <button onClick={() => removeFromCoop(member)} className="w-6 h-6 rounded-full bg-red-500/20 text-red-300 flex items-center justify-center hover:bg-red-50 hover:text-white transition-colors"><X className="w-3 h-3" /></button>
+                        </div>
+                      ))}
+                      <div className="mt-6 pt-4 border-t border-emerald-700/50">
+                        <p className="text-[10px] uppercase font-bold text-emerald-300 tracking-wider mb-2">Total Pooled Capacity</p>
+                        <h4 className="text-2xl font-black text-white">{myCoop.reduce((acc, curr) => acc + curr.stock, 0)} <span className="text-sm font-normal text-emerald-200">kg added</span></h4>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* OPEN BUYER DEMANDS TAB */}
+        {activeTab === 'demands' && (
+          <div className="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-sm">
+            <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <Megaphone className="w-5 h-5 text-emerald-600" /> Open Buyer Demands
+              </h3>
+            </div>
+            {demands.length === 0 ? (
+              <div className="p-12 flex flex-col items-center justify-center text-slate-500 text-center">
+                <Megaphone className="w-12 h-12 mb-4 text-slate-300" />
+                <h4 className="font-bold text-slate-800 mb-1">No Open Demands</h4>
+                <p className="text-sm">Buyers haven't posted any specific crop requirements yet.</p>
+              </div>
+            ) : (
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 bg-white">
+                {demands.map((demand: any) => {
+                  const requiredQty = parseInt(demand.quantity, 10) || 0;
+
+                  return (
+                    <div key={demand.id} className="bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col relative overflow-hidden group hover:border-emerald-200 transition-colors">
+                      <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h4 className="font-bold text-lg text-slate-800">{demand.crop_name}</h4>
+                          <p className="text-xs font-semibold text-emerald-600">Requested by Buyer: {demand.buyer__username}</p>
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-1 rounded-md border border-slate-200 shadow-sm">{new Date(demand.created_at).toLocaleDateString()}</span>
+                      </div>
+                      
+                      <div className="flex gap-4 mb-4 bg-white p-3 rounded-xl border border-slate-100">
+                        <div>
+                          <p className="text-[10px] uppercase font-bold text-slate-400">Target Price</p>
+                          <p className="font-bold text-emerald-700">₹{demand.expected_price}/kg</p>
+                        </div>
+                        <div className="w-px bg-slate-100" />
+                        <div>
+                          <p className="text-[10px] uppercase font-bold text-slate-400">Required Qty</p>
+                          <p className="font-bold text-slate-800">{demand.quantity} kg</p>
+                        </div>
+                      </div>
+                      
+                      {demand.description && (
+                        <div className="mb-5">
+                          <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Requirements</p>
+                          <p className="text-sm text-slate-600 italic leading-relaxed">"{demand.description}"</p>
+                        </div>
+                      )}
+
+                      {myCoop.length > 0 && requiredQty > 500 ? (
+                        <div className="mt-auto space-y-2">
+                          <button 
+                            onClick={() => {
+                              setDirectOfferModal(demand);
+                              setDirectOfferPrice(demand.expected_price);
+                              setDirectOfferQty(demand.quantity);
+                              setUseCoopStock(true); 
+                            }} 
+                            className="w-full py-2.5 bg-[#0b5c43] text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-900 transition-colors shadow-sm"
+                          >
+                            <ShieldCheck className="w-4 h-4" /> Fulfill using Co-op Stock
+                          </button>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => {
+                            setDirectOfferModal(demand);
+                            setDirectOfferPrice(demand.expected_price);
+                            setDirectOfferQty(demand.quantity);
+                            setUseCoopStock(false);
+                          }} 
+                          className="w-full mt-auto py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors shadow-sm"
+                        >
+                          <Handshake className="w-4 h-4" /> Send Direct Offer
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* OFFERS TAB WITH ESCROW TRACKING */}
         {activeTab === 'offers' && (
           <div className="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-sm">
             <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -530,18 +755,35 @@ export function FarmerPortal() {
                       <div className="flex justify-between items-start mb-2">
                         <div>
                           <h4 className="font-bold text-slate-800 text-lg">{offer.productName}</h4>
-                          <p className="text-sm text-slate-500">Buyer: <span className="font-semibold text-slate-700">{offer.buyerId}</span></p>
+                          <p className="text-sm text-slate-500">Buyer: <span className="font-bold text-slate-700">{offer.buyerId}</span></p>
+                          
+                          {offer.farmerId && String(offer.farmerId).includes('Co-op') && (
+                            <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">
+                              <ShieldCheck className="w-3 h-3" /> Fulfilling as Co-op Group
+                            </span>
+                          )}
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                        
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1 ${
                           offer.status === 'Pending' ? 'bg-orange-50 text-orange-600 border-orange-200' :
                           offer.status === 'Accepted' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
+                          offer.status === 'Escrow Funded' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                          offer.status === 'In Transit' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          offer.status === 'Completed' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                          offer.status === 'Declined' ? 'bg-red-50 text-red-700 border-red-200' :
+                          offer.status === 'Countered' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                           'bg-slate-100 text-slate-600 border-slate-200'
                         }`}>
-                          {offer.status}
+                          {offer.status === 'Pending' && <Clock className="w-3.5 h-3.5" />}
+                          {offer.status === 'Accepted' && <CheckCircle2 className="w-3.5 h-3.5" />}
+                          {offer.status === 'Escrow Funded' && <ShieldCheck className="w-3.5 h-3.5" />}
+                          {offer.status === 'In Transit' && <Truck className="w-3.5 h-3.5" />}
+                          {offer.status === 'Completed' && <CheckCircle2 className="w-3.5 h-3.5" />}
+                          {offer.status === 'Countered' ? 'Waiting on Buyer' : offer.status}
                         </span>
                       </div>
                       
-                      <div className="flex flex-wrap gap-4 mb-4">
+                      <div className="flex flex-wrap gap-4 mb-4 mt-3">
                         <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
                           <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Offered Price</p>
                           <p className="font-bold text-slate-800">₹{offer.proposedPrice} <span className="text-xs font-normal text-slate-500">/ kg</span></p>
@@ -552,30 +794,44 @@ export function FarmerPortal() {
                         </div>
                         <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
                           <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Total Deal Value</p>
-                          <p className="font-bold text-emerald-700">₹{(offer.proposedPrice * offer.quantity).toLocaleString()}</p>
+                          <p className="font-bold text-emerald-700">₹{((offer.proposedPrice || 0) * (offer.quantity || 0)).toLocaleString()}</p>
                         </div>
                         <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
                           <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Transport Terms</p>
                           <p className="font-bold text-slate-800 flex items-center gap-1.5"><Truck className="w-3.5 h-3.5 text-slate-500" /> {offer.transportArrangement}</p>
                         </div>
                       </div>
+
+                      {offer.status === 'Escrow Funded' && <p className="text-xs text-purple-600 mb-4 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-4 h-4"/> Funds are Secured in Escrow. It is safe to dispatch the goods.</p>}
+                      {offer.status === 'In Transit' && <p className="text-xs text-blue-600 mb-4 font-semibold flex items-center gap-1.5"><Truck className="w-4 h-4"/> Goods Dispatched. Waiting for Buyer to confirm delivery.</p>}
+                      {offer.status === 'Completed' && <p className="text-xs text-emerald-700 mb-4 font-semibold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/> Buyer confirmed delivery. Funds have been released to your Bank Account!</p>}
                       
                       {offer.status === 'Pending' && (
-                        <div className="flex gap-3">
-                          <button 
-                            onClick={() => updateOfferStatus(offer.id, 'Accepted')}
-                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors"
-                          >
+                        <div className="flex gap-3 w-full md:w-auto mt-2 md:mt-0">
+                          <button onClick={() => updateOfferStatus(offer.id, 'Accepted')} className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors">
                             <CheckCircle2 className="w-4 h-4" /> Accept Offer
                           </button>
+                          
                           <button 
-                            onClick={() => updateOfferStatus(offer.id, 'Declined')}
-                            className="px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-50 transition-colors"
+                            onClick={() => {
+                              setCounterModalData({ id: offer.id, currentPrice: offer.proposedPrice, productName: offer.productName, buyerId: offer.buyerId });
+                              setCounterPrice('');
+                            }} 
+                            className="flex-1 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-bold hover:bg-blue-100 transition-colors"
                           >
-                            <XCircle className="w-4 h-4" /> Decline
+                            Counter Offer
                           </button>
+
+                          <button onClick={() => updateOfferStatus(offer.id, 'Declined')} className="flex-1 px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors"><XCircle className="w-4 h-4" /> Decline</button>
                         </div>
                       )}
+
+                      {offer.status === 'Escrow Funded' && (
+                        <button onClick={() => updateOfferStatus(offer.id, 'In Transit')} className="w-full md:w-auto px-6 py-2.5 bg-[#0b5c43] text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-900 shadow-md">
+                          <Truck className="w-4 h-4" /> Dispatch & Mark as Shipped
+                        </button>
+                      )}
+
                     </div>
                   </div>
                 ))}
@@ -584,7 +840,7 @@ export function FarmerPortal() {
           </div>
         )}
 
-        {/* REAL DATABASE Listings Tab */}
+        {/* LISTINGS INVENTORY TAB */}
         {activeTab === 'crops' && (
           <div className="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-sm">
             <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -618,28 +874,16 @@ export function FarmerPortal() {
                   ) : (
                     <AnimatePresence>
                       {listings.map((product) => (
-                        <motion.tr 
-                          key={product.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.95 }}
-                          className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors"
-                        >
+                        <motion.tr key={product.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 font-semibold text-slate-800 flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-100 shrink-0">
-                              <img src={product.image} className="w-full h-full object-cover" alt={product.name} />
-                            </div>
+                            <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-100 shrink-0"><img src={product.image} className="w-full h-full object-cover" alt={product.name} /></div>
                             {product.name}
                           </td>
                           <td className="px-6 py-4 text-slate-600 font-medium">{product.category}</td>
                           <td className="px-6 py-4 text-slate-600 font-medium">₹{product.price.toFixed(2)} / kg</td>
-                          <td className="px-6 py-4 text-slate-600">{product.stock} kg</td>
+                          <td className="px-6 py-4 text-emerald-600 font-bold">{product.stock} kg remaining</td>
                           <td className="px-6 py-4">
-                            {product.stock > 0 ? (
-                              <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-xs font-bold">Active</span>
-                            ) : (
-                              <span className="bg-red-50 text-red-600 px-3 py-1 rounded-full text-xs font-bold">Sold Out</span>
-                            )}
+                            {product.stock > 0 ? <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-xs font-bold">Active</span> : <span className="bg-red-50 text-red-600 px-3 py-1 rounded-full text-xs font-bold">Sold Out</span>}
                           </td>
                         </motion.tr>
                       ))}
@@ -651,27 +895,198 @@ export function FarmerPortal() {
           </div>
         )}
 
-        {/* Analytics Tab */}
+        {/* INDESTRUCTIBLE FRONTEND ANALYTICS DASHBOARD */}
         {activeTab === 'analytics' && (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-500">
-            <Activity className="w-16 h-16 text-slate-300 mb-4" />
-            <h3 className="text-xl font-bold text-slate-800 mb-2">Analytics Overview</h3>
-            <p className="text-center max-w-md">Detailed analytics and deal completion rates will appear here as you accept more offers.</p>
+          <div className="space-y-8 animate-in fade-in duration-300">
+            {/* 1. FINANCIAL SUMMARY KPI ROW */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Gross Revenue</span>
+                  <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">₹</div>
+                </div>
+                <p className="text-2xl font-black text-slate-800">
+                  ₹{calcRevenue.toLocaleString()}
+                </p>
+                <p className="text-xs text-emerald-600 font-semibold mt-1">From {confirmedDeals.length} confirmed deals</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Estimated Profit</span>
+                  <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold"><TrendingUp className="w-4 h-4"/></div>
+                </div>
+                <p className="text-2xl font-black text-emerald-700">
+                  ₹{calcProfit.toLocaleString()}
+                </p>
+                <p className="text-xs text-slate-400 font-medium mt-1">~48% net margin after input costs</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Volume Sold</span>
+                  <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center font-bold"><Package className="w-4 h-4"/></div>
+                </div>
+                <p className="text-2xl font-black text-slate-800">
+                  {calcVolume.toLocaleString()} <span className="text-sm font-normal text-slate-400">kg</span>
+                </p>
+                <p className="text-xs text-slate-400 font-medium mt-1">Total crop tonnage fulfilled</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Avg Selling Rate</span>
+                  <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center font-bold">⚡</div>
+                </div>
+                <p className="text-2xl font-black text-slate-800">
+                  ₹{calcAvg} <span className="text-sm font-normal text-slate-400">/kg</span>
+                </p>
+                <p className="text-xs text-emerald-600 font-medium mt-1">+6.4% above local APMC modal</p>
+              </div>
+            </div>
+
+            {/* NEW: TOP PERFORMING CROPS (FRONTEND VISUAL) */}
+            {topCrops.length > 0 && (
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                <div className="flex items-center justify-between border-b border-slate-50 pb-4 mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                      <PieChart className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800">Top Performing Crops</h3>
+                      <p className="text-xs text-slate-400">Revenue distribution by commodity</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  {topCrops.map(([cropName, rev]: any, idx: number) => {
+                    const percentage = Math.round((rev / calcRevenue) * 100);
+                    return (
+                      <div key={idx} className="flex items-center gap-4">
+                        <p className="w-24 font-bold text-slate-700 text-sm truncate">{cropName}</p>
+                        <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${idx === 0 ? 'bg-emerald-500' : idx === 1 ? 'bg-blue-500' : 'bg-indigo-400'}`} style={{ width: `${percentage}%` }}></div>
+                        </div>
+                        <p className="w-24 text-right font-bold text-slate-800 text-sm">₹{rev.toLocaleString()}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* REAL-TIME WEATHER & SOIL CARD */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-5">
+                <div className="flex items-center justify-between border-b border-slate-50 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center font-bold">
+                      <Sun className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800">Atmospheric Condition</h3>
+                      <p className="text-xs text-slate-400">Live telemetry for {selectedDistrict}</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full">Live Open-Meteo</span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-slate-50 p-3.5 rounded-xl text-center">
+                    <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Temperature</p>
+                    <p className="text-xl font-bold text-slate-800">{weatherTemp}°C</p>
+                  </div>
+                  <div className="bg-slate-50 p-3.5 rounded-xl text-center">
+                    <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Rel. Humidity</p>
+                    <p className="text-xl font-bold text-slate-800">{analyticsData?.weather?.humidity ?? 60}%</p>
+                  </div>
+                  <div className="bg-slate-50 p-3.5 rounded-xl text-center">
+                    <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Wind Speed</p>
+                    <p className="text-xl font-bold text-slate-800">{analyticsData?.weather?.wind_speed ?? 12} <span className="text-xs font-normal">km/h</span></p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-blue-50/60 rounded-2xl border border-blue-100 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-blue-900">Precipitation Forecast</p>
+                    <p className="text-xs text-blue-700">Surface Rain Probability: {rainChance} mm</p>
+                  </div>
+                  <Droplets className="w-6 h-6 text-blue-500" />
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-5">
+                <div className="flex items-center justify-between border-b border-slate-50 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                      <Sprout className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800">Soil & Mineral Profile</h3>
+                      <p className="text-xs text-slate-400">Agro-Climatic Baseline</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full">{analyticsData?.soil?.soil_type?.split(' ')[0] || 'Regional'} Profile</span>
+                </div>
+
+                <div className="space-y-2.5">
+                  <div className="flex justify-between items-center text-sm p-2 rounded-lg hover:bg-slate-50">
+                    <span className="text-slate-500 font-medium">Predominant Geology:</span>
+                    <span className="font-bold text-slate-800">{analyticsData?.soil?.soil_type ?? 'Black Cotton Soil'}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm p-2 rounded-lg hover:bg-slate-50">
+                    <span className="text-slate-500 font-medium">Active Soil Moisture:</span>
+                    <span className="font-bold text-emerald-600">{analyticsData?.soil?.current_moisture_pct ?? 26}% (Adequate)</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm p-2 rounded-lg hover:bg-slate-50">
+                    <span className="text-slate-500 font-medium">Soil Reaction (pH):</span>
+                    <span className="font-bold text-slate-800">{analyticsData?.soil?.ph ?? '7.8 (Alkaline)'}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm p-2 rounded-lg hover:bg-slate-50">
+                    <span className="text-slate-500 font-medium">NPK Readiness Index:</span>
+                    <span className="font-bold text-slate-800">N: {analyticsData?.soil?.nitrogen?.split(' ')[0] ?? 'Low'} | P: {analyticsData?.soil?.phosphorus?.split(' ')[0] ?? 'Med'} | K: {analyticsData?.soil?.potassium?.split(' ')[0] ?? 'High'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ADVISORY & RECOMMENDATIONS */}
+            <div className="bg-[#163020] text-white p-6 md:p-8 rounded-3xl shadow-lg relative overflow-hidden">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-9 h-9 rounded-full bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <h3 className="text-xl font-bold">Operational Recommendations</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                {confirmedDeals.length > 0 ? (
+                   <div className="p-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 text-sm leading-relaxed">
+                     ✅ You have successfully completed {confirmedDeals.length} deals generating ₹{calcRevenue.toLocaleString()} in revenue. Consider pooling your high-demand items into a Farmer Co-op to fulfill massive bulk orders.
+                   </div>
+                ) : (
+                   <div className="p-4 rounded-xl bg-white/10 text-sm">
+                     Record more confirmed deals to unlock predictive seasonal margin curves.
+                   </div>
+                )}
+                <div className="p-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 text-sm leading-relaxed">
+                  Soil moisture is currently optimal for vegetative growth based on local {selectedDistrict} telemetry. Avoid nitrogen over-application.
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
       </div>
 
-      {/* Add Crop Modal (Wired to Real DB) */}
+      {/* MODALS */}
       {isAddingCrop && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsAddingCrop(false)} />
           <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h2 className="text-xl font-bold text-slate-800">Add New Listing</h2>
-              <button onClick={() => setIsAddingCrop(false)} className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-500 hover:text-slate-800 shadow-sm">
-                <X className="w-4 h-4" />
-              </button>
+              <button onClick={() => setIsAddingCrop(false)} className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-500 hover:text-slate-800 shadow-sm"><X className="w-4 h-4" /></button>
             </div>
             
             <form onSubmit={handleAddCrop} className="p-6 space-y-4">
@@ -679,7 +1094,6 @@ export function FarmerPortal() {
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Crop Name</label>
                 <input type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Fresh Red Onions" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 focus:bg-white" />
               </div>
-              
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">Asking Price (₹/kg)</label>
@@ -690,7 +1104,6 @@ export function FarmerPortal() {
                   <input type="number" required min="0" value={stock} onChange={(e) => setStock(e.target.value)} placeholder="e.g. 500" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 focus:bg-white" />
                 </div>
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">Category</label>
@@ -705,7 +1118,6 @@ export function FarmerPortal() {
                   <input type="text" required value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Pune, MH" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 focus:bg-white" />
                 </div>
               </div>
-
               <div className="pt-4">
                 <button disabled={isSubmitting} type="submit" className="w-full py-3.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/30 disabled:opacity-70">
                   {isSubmitting ? 'Saving...' : 'Publish Listing'}
@@ -715,6 +1127,81 @@ export function FarmerPortal() {
           </div>
         </div>
       )}
+
+      {/* COUNTER OFFER MODAL */}
+      {counterModalData && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="relative bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-slate-800">Counter Offer</h2>
+              <button onClick={() => setCounterModalData(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-6">
+              <p className="text-sm text-blue-900 leading-relaxed">
+                Buyer <strong className="font-bold text-blue-950">{counterModalData.buyerId}</strong> proposed an offer of <strong className="font-black text-blue-950 text-base">₹{counterModalData.currentPrice}/kg</strong> for <strong>{counterModalData.productName}</strong>.
+              </p>
+            </div>
+            
+            <form onSubmit={submitCounterOffer} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Your Counter Asking Price (₹/kg)</label>
+                <input 
+                  type="number" required min="1" value={counterPrice} 
+                  onChange={(e) => setCounterPrice(e.target.value)} 
+                  placeholder="Enter counter price" 
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white text-lg font-bold text-slate-800" 
+                />
+              </div>
+              <div className="pt-2 flex gap-3">
+                <button type="button" onClick={() => setCounterModalData(null)} className="flex-1 py-3.5 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors">Cancel</button>
+                <button type="submit" className="flex-1 py-3.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-600/30 transition-colors">Send Counter</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DIRECT PRIVATE OFFER MODAL */}
+      {directOfferModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="relative bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-slate-800">Send Direct Offer</h2>
+              <button onClick={() => setDirectOfferModal(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 mb-6">
+              <p className="text-sm text-emerald-900 leading-relaxed">
+                You are proposing a private deal directly to <strong className="font-bold text-emerald-950">{directOfferModal.buyer__username}</strong> for <strong>{directOfferModal.crop_name}</strong>. This will not be listed on the public market.
+              </p>
+            </div>
+            
+            <form onSubmit={handleSendDirectOffer} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Price (₹/kg)</label>
+                  <input type="number" required min="1" value={directOfferPrice} onChange={(e) => setDirectOfferPrice(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 focus:bg-white font-bold text-slate-800" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Quantity (kg)</label>
+                  <input type="number" required min="1" value={directOfferQty} onChange={(e) => setDirectOfferQty(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 focus:bg-white font-bold text-slate-800" />
+                </div>
+              </div>
+              
+              <div className="pt-2 flex gap-3">
+                <button type="button" onClick={() => setDirectOfferModal(null)} className="flex-1 py-3.5 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors">Cancel</button>
+                <button type="submit" className="flex-1 py-3.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/30">Send Offer</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

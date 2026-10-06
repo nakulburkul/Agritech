@@ -27,6 +27,8 @@ export function Login() {
         localStorage.setItem('isAuthenticated', 'true');
         localStorage.setItem('userRole', data.role);
         localStorage.setItem('username', data.username);
+        // NEW: Save the user's registered location so it stops defaulting to Pune
+        localStorage.setItem('userLocation', data.location || 'Pune');
         
         if (data.role === 'admin') {
           navigate('/'); 

@@ -25,7 +25,11 @@ SECRET_KEY = 'django-insecure-(zi0x7uj$0&y(g!u%b2$rom9f0g-kc!q^cwf+u_amd@0gr3q7j
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# settings.py
+
+# 1. Allow any device to connect to your Django server
+ALLOWED_HOSTS = ['*'] 
+
 
 
 # Application definition
@@ -38,6 +42,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
+    'rest_framework',
     'api',
 ]
 
@@ -130,12 +135,8 @@ MAILERS = {
 }
 
 # Allow React to communicate with Django
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
-    "http://127.0.0.1:8000",
-]
+# 2. Tell CORS to accept requests from your phone/other PCs
+CORS_ALLOW_ALL_ORIGINS = True
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/6.1/ref/settings/#default-auto-field

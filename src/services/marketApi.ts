@@ -1,110 +1,81 @@
-export interface MarketInfo {
+export interface CommodityData {
+  id?: string;
   market: string;
-  district: string;
-  min_price: string | number;
-  max_price: string | number;
-  modal_price: string | number;
-  trend: 'up' | 'down' | 'stable';
-  change: string;
+  commodity: string;
+  variety?: string;
+  min_price: number;
+  max_price: number;
+  modal_price: number;
+  unit?: string;
+  image?: string;
+  trend?: 'up' | 'down' | 'stable';
+  change?: string;
+  category?: string;
+  is_live_scraped?: boolean;
 }
 
-export interface CommodityData {
-  id: string;
-  commodity: string;
-  category: string;
-  image: string;
-  markets: MarketInfo[];
-}
+export const LOCAL_BAZAARS = ["Borivali", "Kandivali", "Malad", "Dahisar", "Andheri"];
 
 export const MAHARASHTRA_DISTRICTS = [
-  "Ahmednagar", "Akola", "Amravati", "Chhatrapati Sambhajinagar", "Beed",
-  "Bhandara", "Buldhana", "Chandrapur", "Dhule", "Gadchiroli",
-  "Gondia", "Hingoli", "Jalgaon", "Jalna", "Kolhapur",
-  "Latur", "Mumbai", "Mumbai Suburban", "Nagpur", "Nanded",
-  "Nandurbar", "Nashik", "Dharashiv", "Palghar", "Parbhani",
-  "Pune", "Raigad", "Ratnagiri", "Sangli", "Satara",
-  "Sindhudurg", "Solapur", "Thane", "Wardha", "Washim", "Yavatmal"
+  "Borivali", "Kandivali", "Malad", "Dahisar", "Andheri",
+  "Ahilyanagar", "Akola", "Amravati", "Beed", "Bhandara", "Buldhana", "Chandrapur", "Chhatrapati Sambhajinagar", 
+  "Dharashiv", "Dhule", "Gadchiroli", "Gondia", "Hingoli", "Jalgaon", "Jalna", "Kolhapur", "Latur", "Mumbai City", 
+  "Mumbai Suburban", "Nagpur", "Nanded", "Nandurbar", "Nashik", "Palghar", "Parbhani", "Pune", "Raigad", "Ratnagiri", 
+  "Sangli", "Satara", "Sindhudurg", "Solapur", "Thane", "Wardha", "Washim", "Yavatmal"
 ];
 
-const CROP_IMAGES: Record<string, string> = {
-  'tomato': 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=400&q=80',
-  'onion': 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?auto=format&fit=crop&w=400&q=80',
-  'potato': 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?auto=format&fit=crop&w=400&q=80',
-  'wheat': 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=400&q=80',
-  'rice': 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=400&q=80',
-  'cotton': 'https://images.unsplash.com/photo-1505700207310-91402c0c326e?auto=format&fit=crop&w=400&q=80',
-  'soybean': 'https://images.unsplash.com/photo-1599895055042-49162fdbf08b?auto=format&fit=crop&w=400&q=80',
-  'sugarcane': 'https://images.unsplash.com/photo-1598006764516-7782161beaf2?auto=format&fit=crop&w=400&q=80',
-  'pomegranate': 'https://images.unsplash.com/photo-1615486171448-4ca3f2402bc0?auto=format&fit=crop&w=400&q=80',
-  'mango': 'https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&w=400&q=80',
-  'banana': 'https://images.unsplash.com/photo-1571501679680-de32f1e7aad4?auto=format&fit=crop&w=400&q=80',
-  'grapes': 'https://images.unsplash.com/photo-1537640538966-79f369143f8f?auto=format&fit=crop&w=400&q=80',
-  'tur': 'https://images.unsplash.com/photo-1585994192701-f1a505c817ea?auto=format&fit=crop&w=400&q=80',
-  'orange': 'https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?auto=format&fit=crop&w=400&q=80',
-  'mousambi': 'https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?auto=format&fit=crop&w=400&q=80',
-  'beans': 'https://images.unsplash.com/photo-1530507629858-e4977d30e9e0?auto=format&fit=crop&w=400&q=80',
-  'mataki': 'https://images.unsplash.com/photo-1585994192701-f1a505c817ea?auto=format&fit=crop&w=400&q=80',
-  'pumpkin': 'https://images.unsplash.com/photo-1506917728037-b6fb041a4f34?auto=format&fit=crop&w=400&q=80',
-  'cowpea': 'https://images.unsplash.com/photo-1585994192701-f1a505c817ea?auto=format&fit=crop&w=400&q=80',
-  'tamarind fruit': 'https://www.allrecipes.com/thmb/yHithL-d5CwWDIvpbQpNrb2lJoo=/750x0/filters:no_upscale():max_bytes(150000):strip_icc():format(webp)/GettyImages-1147545054-2000-cf62d6b8188846518193157fba8449be.jpg',
-  'Bajra(Pearl Millet/Cumbu)': 'https://dhanyam.in/wp-content/uploads/2026/03/35226_3.jpg',
-
-  'default': 'https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&w=400&q=80',
+const CROP_IMAGES: Record<string, { img: string; category: string }> = {
+  'tomato': { img: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&q=80', category: 'Vegetables' },
+  'onion': { img: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=500&q=80', category: 'Vegetables' },
+  'potato': { img: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=500&q=80', category: 'Vegetables' },
+  'bhindi': { img: 'https://images.unsplash.com/photo-1425543103986-22abb7d7e8d2?w=500&q=80', category: 'Vegetables' },
+  'lady finger': { img: 'https://images.unsplash.com/photo-1425543103986-22abb7d7e8d2?w=500&q=80', category: 'Vegetables' },
+  'chilli': { img: 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=500&q=80', category: 'Vegetables' },
+  'gobi': { img: 'https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?w=500&q=80', category: 'Vegetables' },
+  'cauliflower': { img: 'https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?w=500&q=80', category: 'Vegetables' },
+  'kothmir': { img: 'https://images.unsplash.com/photo-1592417817098-8f3d69104a47?w=500&q=80', category: 'Herbs' },
+  'coriander': { img: 'https://images.unsplash.com/photo-1592417817098-8f3d69104a47?w=500&q=80', category: 'Herbs' },
+  'palak': { img: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=500&q=80', category: 'Greens' },
+  'spinach': { img: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=500&q=80', category: 'Greens' },
+  'ginger': { img: 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=500&q=80', category: 'Spices' },
+  'capsicum': { img: 'https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?w=500&q=80', category: 'Vegetables' },
+  'matar': { img: 'https://images.unsplash.com/photo-1587735243615-c03f25aaff15?w=500&q=80', category: 'Vegetables' }
 };
 
-function matchImage(name: string): string {
-  const lower = name.toLowerCase();
-  for (const [key, url] of Object.entries(CROP_IMAGES)) {
-    if (lower.includes(key)) return url;
-  }
-  return CROP_IMAGES['default'];
-}
-
-export async function fetchMarketPrices(district = '', state = 'Maharashtra'): Promise<CommodityData[]> {
+export async function fetchMarketPrices(locationName: string = 'Borivali'): Promise<CommodityData[]> {
   try {
-    let url = `http://127.0.0.1:8000/api/market-prices/?state=${state}`;
-    if (district && district !== 'All') {
-      url += `&district=${encodeURIComponent(district)}`;
-    }
+    const isLocal = LOCAL_BAZAARS.some(b => b.toLowerCase() === locationName.toLowerCase());
+    const paramKey = isLocal ? 'suburb' : 'district';
+    const type = isLocal ? 'bazaar' : 'apmc';
+    
+    const response = await fetch(`http://${window.location.hostname}:8000/api/market-prices/?${paramKey}=${encodeURIComponent(locationName)}&type=${type}`);
+    const resData = await response.json();
 
-    const response = await fetch(url);
-    const result = await response.json();
-    const grouped: Record<string, CommodityData> = {};
-
-    if (result.data && result.data.length > 0) {
-      result.data.forEach((item: any, index: number) => {
-        const rawName = item.commodity || 'Produce';
-        const cleanMarket = item.market ? item.market.replace(/[()]/g, ' ').trim() : 'Mandi';
-        const marketLabel = `${cleanMarket} Mandi, ${item.district || district}`;
-
-        if (!grouped[rawName]) {
-          grouped[rawName] = {
-            id: `${rawName}-${index}`,
-            commodity: rawName,
-            category: item.variety || 'Agricultural Produce',
-            image: matchImage(rawName),
-            markets: [],
-          };
-        }
-
-        // Add each unique mandi location found for this commodity in this district
-        if (!grouped[rawName].markets.some(m => m.market === marketLabel)) {
-          grouped[rawName].markets.push({
-            market: marketLabel,
-            district: item.district || district,
-            min_price: item.min_price || item.modal_price,
-            max_price: item.max_price || item.modal_price,
-            modal_price: item.modal_price,
-            trend: 'up',
-            change: '+1.5%',
-          });
-        }
+    if (resData.status === 'success' && Array.isArray(resData.data)) {
+      return resData.data.map((item: any, idx: number) => {
+        const lowerName = (item.commodity || '').toLowerCase();
+        const foundKey = Object.keys(CROP_IMAGES).find(k => lowerName.includes(k)) || 'tomato';
+        
+        return {
+          id: `market-${idx}`,
+          market: item.market || `${locationName} Bazaar`,
+          commodity: item.commodity || 'Vegetable',
+          variety: item.variety || 'Fresh Local',
+          unit: item.unit || 'kg',
+          min_price: item.min_price || 0,
+          max_price: item.max_price || 0,
+          modal_price: item.modal_price || 0,
+          category: CROP_IMAGES[foundKey]?.category || 'Vegetables',
+          image: CROP_IMAGES[foundKey]?.img || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&q=80',
+          trend: 'stable',
+          change: item.is_live_scraped ? '● Live Scraped' : 'Retail Mandi',
+          is_live_scraped: item.is_live_scraped
+        };
       });
     }
-
-    return Object.values(grouped);
-  } catch (error) {
-    console.error('Error fetching market prices:', error);
+    return [];
+  } catch (err) {
+    console.error("Market API error:", err);
     return [];
   }
 }
