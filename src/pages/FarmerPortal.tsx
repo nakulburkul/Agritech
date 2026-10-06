@@ -1,13 +1,57 @@
 import React, { useState, useEffect } from 'react';
-import { Package, IndianRupee, Sprout, TrendingUp, Plus, Activity, LayoutDashboard, Settings, User, X, Handshake, CheckCircle2, XCircle, Truck, MapPin, Bell, BarChart2, CloudSun, ChevronRight, Loader2, Sun, Droplets, ThermometerSun, AlertTriangle, RefreshCw, Navigation, Megaphone, PlusCircle, Users, UserPlus, ShieldCheck, Clock, PieChart } from 'lucide-react';
+import { Package, IndianRupee, Sprout, TrendingUp, Plus, Activity, LayoutDashboard, Settings, User, X, Handshake, CheckCircle2, XCircle, Truck, MapPin, Bell, BarChart2, CloudSun, ChevronRight, Loader2, Sun, Droplets, ThermometerSun, AlertTriangle, RefreshCw, Navigation, Megaphone, PlusCircle, Users, UserPlus, ShieldCheck, Clock, PieChart, Globe2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fetchMarketPrices, LOCAL_BAZAARS, MAHARASHTRA_DISTRICTS } from '../services/marketApi';
+import { getImageForCrop } from './CustomerPortal';
 
 const API_BASE = `http://${window.location.hostname}:8000/api`;
+
+// ==========================================
+// LIGHTWEIGHT MULTILINGUAL DICTIONARY
+// ==========================================
+const dict = {
+  en: {
+    dashboard: "Dashboard", coops: "Co-ops & Groups", demands: "Buyer Demands", offers: "My Offers", crops: "My Listings", analytics: "Analytics",
+    verified: "Verified Seller", loc: "Location", marketTrend: "Market Trend Premium", liveWeather: "Live Weather", selectedMarket: "Selected Market",
+    perfAnalytics: "Performance Analytics", perfSub: "Track your closed deals, revenue, and district agro-climatic profile.",
+    grossRev: "Gross Revenue", revSub: "From confirmed deals", estProfit: "Estimated Profit", profitSub: "~48% net margin after input costs",
+    volSold: "Volume Sold", volSub: "Total crop tonnage fulfilled", avgRate: "Avg Selling Rate", rateSub: "above local APMC modal",
+    topCrops: "Top Performing Crops", topSub: "Revenue distribution by commodity",
+    atmos: "Atmospheric Condition", atmosSub: "Live telemetry for", temp: "Temperature", hum: "Rel. Humidity", wind: "Wind Speed", precip: "Precipitation Forecast", rainProb: "Surface Rain Probability",
+    soil: "Soil & Mineral Profile", soilSub: "Agro-Climatic Baseline", geo: "Predominant Geology", moist: "Active Soil Moisture", ph: "Soil Reaction (pH)", npk: "NPK Readiness Index",
+    opRec: "Operational Recommendations"
+  },
+  hi: {
+    dashboard: "डैशबोर्ड", coops: "सहकारी समूह", demands: "खरीदार की मांग", offers: "मेरे प्रस्ताव", crops: "मेरी लिस्टिंग", analytics: "एनालिटिक्स",
+    verified: "सत्यापित विक्रेता", loc: "स्थान", marketTrend: "बाजार का रुझान", liveWeather: "लाइव मौसम", selectedMarket: "चयनित बाजार",
+    perfAnalytics: "प्रदर्शन एनालिटिक्स", perfSub: "अपने बंद सौदों, राजस्व और जिले की कृषि-जलवायु प्रोफ़ाइल को ट्रैक करें।",
+    grossRev: "कुल राजस्व", revSub: "पुष्ट सौदों से", estProfit: "अनुमानित लाभ", profitSub: "इनपुट लागत के बाद ~48% शुद्ध मार्जिन",
+    volSold: "बेची गई मात्रा", volSub: "कुल फसल टन भार पूरा हुआ", avgRate: "औसत बिक्री दर", rateSub: "स्थानीय APMC मोडल से ऊपर",
+    topCrops: "शीर्ष प्रदर्शन करने वाली फसलें", topSub: "कमोडिटी के अनुसार राजस्व वितरण",
+    atmos: "वायुमंडलीय स्थिति", atmosSub: "लाइव टेलीमेट्री", temp: "तापमान", hum: "सापेक्ष आर्द्रता", wind: "हवा की गति", precip: "वर्षा का पूर्वानुमान", rainProb: "सतह वर्षा की संभावना",
+    soil: "मिट्टी और खनिज प्रोफ़ाइल", soilSub: "कृषि-जलवायु बेसलाइन", geo: "प्रमुख भूविज्ञान", moist: "सक्रिय मिट्टी की नमी", ph: "मिट्टी की प्रतिक्रिया (pH)", npk: "NPK तत्परता सूचकांक",
+    opRec: "परिचालन संबंधी सिफारिशें"
+  },
+  mr: {
+    dashboard: "डॅशबोर्ड", coops: "सहकारी गट", demands: "खरेदीदारांच्या मागण्या", offers: "माझे प्रस्ताव", crops: "माझी लिस्टिंग", analytics: "विश्लेषण",
+    verified: "सत्यापित विक्रेता", loc: "स्थान", marketTrend: "बाजाराचा कल", liveWeather: "थेट हवामान", selectedMarket: "निवडलेला बाजार",
+    perfAnalytics: "कामगिरी विश्लेषण", perfSub: "तुमचे पूर्ण झालेले व्यवहार, महसूल आणि जिल्ह्याच्या कृषी-हवामान प्रोफाइलचा मागोवा घ्या.",
+    grossRev: "एकूण महसूल", revSub: "निश्चित केलेल्या व्यवहारांमधून", estProfit: "अंदाजित नफा", profitSub: "इनपुट खर्चानंतर ~48% निव्वळ नफा",
+    volSold: "विक्री केलेले प्रमाण", volSub: "एकूण पीक टनेज पूर्ण झाले", avgRate: "सरासरी विक्री दर", rateSub: "स्थानिक APMC मोडलच्या वर",
+    topCrops: "सर्वोत्तम कामगिरी करणारी पिके", topSub: "कमोडिटीनुसार महसूल वितरण",
+    atmos: "वातावरणीय स्थिती", atmosSub: "थेट टेलीमेट्री", temp: "तापमान", hum: "सापेक्ष आर्द्रता", wind: "वाऱ्याचा वेग", precip: "पावसाचा अंदाज", rainProb: "पृष्ठभागावर पावसाची शक्यता",
+    soil: "माती आणि खनिज प्रोफाइल", soilSub: "कृषी-हवामान बेसलाइन", geo: "प्रमुख भूविज्ञान", moist: "सक्रिय मातीतील ओलावा", ph: "मातीची प्रतिक्रिया (pH)", npk: "NPK तयारी निर्देशांक",
+    opRec: "शिफारसी आणि सूचना"
+  }
+};
 
 export function FarmerPortal() {
   const currentUser = localStorage.getItem('username') || '';
   
+  // LANGUAGE STATE
+  const [lang, setLang] = useState<'en' | 'hi' | 'mr'>('en');
+  const t = dict[lang];
+
   const [listings, setListings] = useState<any[]>([]);
   const [offers, setOffers] = useState<any[]>([]);
   const [demands, setDemands] = useState<any[]>([]);
@@ -29,8 +73,10 @@ export function FarmerPortal() {
   const [userCoordinates, setUserCoordinates] = useState<{lat: number, lng: number} | null>(null);
   const [locationStatus, setLocationStatus] = useState('');
   
+  // AI PREDICTION & ANALYTICS STATE (Fix for missing Weather UI)
   const [prediction, setPrediction] = useState('');
   const [predictions, setPredictions] = useState<any[]>([]);
+  const [predictAnalytics, setPredictAnalytics] = useState<any>(null);
   const [isPredicting, setIsPredicting] = useState(false);
   const [soilType, setSoilType] = useState('Black Cotton');
   const [hasIrrigation, setHasIrrigation] = useState(false);
@@ -58,7 +104,6 @@ export function FarmerPortal() {
   const [location, setLocation] = useState('Pune, MH');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // FETCH DATA
   const fetchMyInventory = async () => {
     setIsLoadingInventory(true);
     try {
@@ -140,7 +185,7 @@ export function FarmerPortal() {
           setSelectedDistrict(match);
           setUserLocation(`${match}, Maharashtra`);
           setUserCoordinates({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          setPredictions([]); setPrediction(''); setLocationStatus('');
+          setPredictions([]); setPrediction(''); setPredictAnalytics(null); setLocationStatus('');
         } catch (err) { setLocationStatus(''); }
       },
       () => setLocationStatus('')
@@ -159,6 +204,7 @@ export function FarmerPortal() {
       });
       const data = await response.json();
       if (data.status === 'success') {
+        if (data.analytics) setPredictAnalytics(data.analytics); // Saves the telemetry for UI
         if (data.predictions && data.predictions.length > 0) {
           setPredictions(data.predictions); setPrediction(data.predictions[0].crop);
         } else { setPrediction(data.prediction || 'Wheat'); }
@@ -230,10 +276,10 @@ export function FarmerPortal() {
     } catch (err) { alert("Failed to update status."); }
   };
 
-  const submitCounterOffer = (e: React.FormEvent) => {
+  const submitCounterOffer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (counterModalData && counterPrice && !isNaN(Number(counterPrice))) {
-      updateOfferStatus(counterModalData.id, 'Countered', parseFloat(counterPrice));
+      await updateOfferStatus(counterModalData.id, 'Countered', parseFloat(counterPrice));
       setCounterModalData(null);
       setCounterPrice('');
     }
@@ -252,7 +298,6 @@ export function FarmerPortal() {
   const calculateMarketTrend = () => {
     if (!localMandiPrices || localMandiPrices.length === 0) return { val: '0.0%', type: 'stable' };
     let totalPremium = 0, validCount = 0;
-    
     localMandiPrices.forEach(item => {
       const minP = Number(item.min_price) || 0;
       const modP = Number(item.modal_price) || 0;
@@ -261,7 +306,6 @@ export function FarmerPortal() {
         validCount++;
       }
     });
-    
     if (validCount === 0) return { val: '0.0%', type: 'stable' };
     const avgPremium = totalPremium / validCount;
     const type = avgPremium > 12 ? 'up' : avgPremium < 4 ? 'down' : 'stable';
@@ -269,32 +313,42 @@ export function FarmerPortal() {
   };
 
   const marketTrend = calculateMarketTrend();
-  
-  // ======================================================================
-  // THE INDESTRUCTIBLE FRONTEND ANALYTICS ENGINE
-  // ======================================================================
   const validStatuses = ['Accepted', 'Escrow Funded', 'In Transit', 'Completed', 'Paid'];
   const confirmedDeals = (offers || []).filter(o => validStatuses.includes(o.status));
   
   const calcRevenue = confirmedDeals.reduce((sum, o) => sum + ((Number(o.proposedPrice) || 0) * (Number(o.quantity) || 0)), 0);
   const calcVolume = confirmedDeals.reduce((sum, o) => sum + (Number(o.quantity) || 0), 0);
-  const calcProfit = calcRevenue * 0.48; // Standard 48% agritech profit margin estimate
+  const calcProfit = calcRevenue * 0.48; 
   const calcAvg = calcVolume > 0 ? (calcRevenue / calcVolume).toFixed(2) : 0;
 
-  // Calculate crop distribution for the new visual chart
   const cropDistribution = confirmedDeals.reduce((acc: any, o) => {
     const name = o.productName || 'Other';
     acc[name] = (acc[name] || 0) + ((Number(o.proposedPrice) || 0) * (Number(o.quantity) || 0));
     return acc;
   }, {});
-  
-  const topCrops = Object.entries(cropDistribution)
-    .sort((a: any, b: any) => b[1] - a[1])
-    .slice(0, 3); // Top 3 crops by revenue
+  const topCrops = Object.entries(cropDistribution).sort((a: any, b: any) => b[1] - a[1]).slice(0, 3);
 
   const weatherTemp = analyticsData?.weather?.temperature ?? '--';
   const rainChance = analyticsData?.weather?.precipitation_chance ?? 0;
   const weatherCondition = rainChance > 25 ? 'Rainy' : (analyticsData?.weather?.humidity > 70 ? 'Cloudy' : 'Sunny');
+
+  const getTabTitle = () => {
+    if (activeTab === 'coops') return t.coops;
+    if (activeTab === 'demands') return t.demands;
+    if (activeTab === 'offers') return t.offers;
+    if (activeTab === 'crops') return t.crops;
+    if (activeTab === 'analytics') return t.perfAnalytics;
+    return t.dashboard;
+  };
+
+  const getTabSub = () => {
+    if (activeTab === 'coops') return 'Pool your stock with nearby farmers to fulfill massive bulk orders.';
+    if (activeTab === 'demands') return 'Fulfill open market requirements directly.';
+    if (activeTab === 'offers') return 'Manage incoming bids and negotiate with buyers.';
+    if (activeTab === 'crops') return 'Control your active market inventory.';
+    if (activeTab === 'analytics') return t.perfSub;
+    return 'Manage your agribusiness operations.';
+  };
 
   return (
     <div className="pt-24 min-h-screen bg-slate-50 flex flex-col md:flex-row pb-16">
@@ -307,48 +361,59 @@ export function FarmerPortal() {
           </div>
           <div>
             <p className="font-bold text-slate-800">{currentUser || 'Farmer'}</p>
-            <p className="text-xs text-emerald-600 font-semibold">Verified Seller</p>
+            <p className="text-xs text-emerald-600 font-semibold">{t.verified}</p>
           </div>
         </div>
 
         <nav className="space-y-2">
-          <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'dashboard' ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}><LayoutDashboard className="w-5 h-5" /> Dashboard</button>
+          <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'dashboard' ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}><LayoutDashboard className="w-5 h-5" /> {t.dashboard}</button>
           <button onClick={() => setActiveTab('coops')} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'coops' ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
-            <div className="flex items-center gap-3"><Users className="w-5 h-5" /> Co-ops & Groups</div>
+            <div className="flex items-center gap-3"><Users className="w-5 h-5" /> {t.coops}</div>
             {myCoop.length > 0 && <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{myCoop.length}</span>}
           </button>
           <button onClick={() => setActiveTab('demands')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'demands' ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
-            <Megaphone className="w-5 h-5" /> Buyer Demands
+            <Megaphone className="w-5 h-5" /> {t.demands}
           </button>
           <button onClick={() => setActiveTab('offers')} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'offers' ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
-            <div className="flex items-center gap-3"><Handshake className="w-5 h-5" /> Offers</div>
+            <div className="flex items-center gap-3"><Handshake className="w-5 h-5" /> {t.offers}</div>
             {pendingOffersCount > 0 && <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{pendingOffersCount}</span>}
           </button>
-          <button onClick={() => setActiveTab('crops')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'crops' ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}><Package className="w-5 h-5" /> My Listings</button>
-          <button onClick={() => setActiveTab('analytics')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'analytics' ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}><Activity className="w-5 h-5" /> Analytics</button>
+          <button onClick={() => setActiveTab('crops')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'crops' ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}><Package className="w-5 h-5" /> {t.crops}</button>
+          <button onClick={() => setActiveTab('analytics')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'analytics' ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}><Activity className="w-5 h-5" /> {t.analytics}</button>
         </nav>
       </aside>
 
       {/* MAIN PORTAL AREA */}
       <div className="flex-1 px-4 md:px-6 lg:px-12 py-4 md:py-8 w-full max-w-5xl mx-auto">
         
+        {/* HEADER & LANGUAGE TOGGLE */}
         {activeTab !== 'dashboard' && (
-          <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-4">
             <div>
               <h1 className="text-3xl md:text-4xl font-serif text-[#163020] tracking-[-0.04em] mb-2">
-                {activeTab === 'coops' ? 'Farmer Cooperatives' : 
-                 activeTab === 'analytics' ? 'Performance Analytics' : 'Seller Dashboard'}
+                {getTabTitle()}
               </h1>
               <p className="text-slate-500">
-                {activeTab === 'coops' ? 'Pool your stock with nearby farmers to fulfill massive bulk orders.' : 
-                 activeTab === 'analytics' ? 'Track your closed deals, revenue, and district agro-climatic profile.' : 'Manage your listings and negotiate deals directly with buyers.'}
+                {getTabSub()}
               </p>
             </div>
-            {activeTab !== 'coops' && activeTab !== 'analytics' && (
-              <button onClick={() => setIsAddingCrop(true)} className="px-5 py-2.5 bg-[#163020] text-white rounded-full font-bold shadow-md hover:bg-emerald-900 transition-colors flex items-center gap-2">
-                <Plus className="w-4 h-4" /> Add New Listing
-              </button>
-            )}
+            
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="flex items-center bg-white border border-slate-200 rounded-full px-4 py-2 shadow-sm shrink-0">
+                  <Globe2 className="w-4 h-4 text-emerald-600 mr-2" />
+                  <select value={lang} onChange={(e: any) => setLang(e.target.value)} className="bg-transparent text-sm font-bold text-slate-700 focus:outline-none cursor-pointer">
+                      <option value="en">English</option>
+                      <option value="hi">हिंदी (Hindi)</option>
+                      <option value="mr">मराठी (Marathi)</option>
+                  </select>
+              </div>
+
+              {activeTab !== 'coops' && activeTab !== 'analytics' && (
+                <button onClick={() => setIsAddingCrop(true)} className="w-full sm:w-auto px-5 py-2.5 bg-[#163020] text-white rounded-full font-bold shadow-md hover:bg-emerald-900 transition-colors flex items-center justify-center gap-2 text-sm shrink-0">
+                  <Plus className="w-4 h-4" /> Add New Listing
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -362,9 +427,18 @@ export function FarmerPortal() {
                     {currentUser ? currentUser.charAt(0).toUpperCase() : 'F'}
                   </div>
                   <div>
-                    <p className="text-xs text-emerald-100 font-medium mb-0.5">Location</p>
+                    <p className="text-xs text-emerald-100 font-medium mb-0.5">{t.loc}</p>
                     <p className="font-bold flex items-center gap-1.5 text-lg truncate max-w-[200px] md:max-w-[400px]"><MapPin className="w-4 h-4 shrink-0"/> {userLocation}</p>
                   </div>
+                </div>
+                {/* Dashboard Lang Toggle */}
+                <div className="hidden sm:flex items-center bg-emerald-800/50 border border-emerald-600 rounded-full px-3 py-1.5 backdrop-blur-sm">
+                    <Globe2 className="w-4 h-4 text-emerald-300 mr-2" />
+                    <select value={lang} onChange={(e: any) => setLang(e.target.value)} className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer">
+                        <option value="en" className="text-slate-800">English</option>
+                        <option value="hi" className="text-slate-800">हिंदी</option>
+                        <option value="mr" className="text-slate-800">मराठी</option>
+                    </select>
                 </div>
               </div>
               <div className="h-20 md:h-24"></div> 
@@ -379,7 +453,7 @@ export function FarmerPortal() {
                 }`}>
                   <BarChart2 className="w-6 h-6"/>
                 </div>
-                <p className="text-slate-400 text-xs md:text-sm font-semibold mb-1">Market Trend Premium</p>
+                <p className="text-slate-400 text-xs md:text-sm font-semibold mb-1">{t.marketTrend}</p>
                 <h3 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">
                   {isLoadingMandi ? <Loader2 className="w-5 h-5 animate-spin text-slate-300 inline-block"/> : marketTrend.val}
                 </h3>
@@ -394,7 +468,7 @@ export function FarmerPortal() {
                    weatherCondition === 'Cloudy' ? <CloudSun className="w-6 h-6 text-slate-500"/> :
                    <Sun className="w-6 h-6 text-orange-500"/>}
                 </div>
-                <p className="text-slate-400 text-xs md:text-sm font-semibold mb-1">Live {selectedDistrict} Weather</p>
+                <p className="text-slate-400 text-xs md:text-sm font-semibold mb-1">{t.liveWeather}</p>
                 <h3 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">
                   {isLoadingAnalytics ? <Loader2 className="w-5 h-5 animate-spin text-slate-300 inline-block"/> : `${weatherCondition} •`}
                 </h3>
@@ -409,7 +483,7 @@ export function FarmerPortal() {
                 <div className="flex items-center gap-3 w-full sm:w-auto">
                   <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0"><MapPin className="w-5 h-5" /></div>
                   <div>
-                    <p className="text-[10px] uppercase font-bold text-slate-400">Selected Market</p>
+                    <p className="text-[10px] uppercase font-bold text-slate-400">{t.selectedMarket}</p>
                     <h2 className="text-lg font-bold text-slate-800">{selectedDistrict}</h2>
                   </div>
                 </div>
@@ -424,6 +498,7 @@ export function FarmerPortal() {
                       setUserCoordinates(null); 
                       setPredictions([]); 
                       setPrediction('');
+                      setPredictAnalytics(null);
                     }}
                     className="w-full sm:w-64 px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer transition-colors"
                   >
@@ -490,10 +565,48 @@ export function FarmerPortal() {
                         <p className="text-xs font-semibold text-emerald-700/60 mt-2 flex items-center justify-center gap-1"><MapPin className="w-3.5 h-3.5" /> Simulated for {userLocation}</p>
                       </div>
 
+                      {/* WEATHER TELEMETRY GRID */}
+                      {predictAnalytics && (
+                        <div>
+                          <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Projected Seasonal Agro-Climate Telemetry</h5>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-xl text-center">
+                              <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Thermal Units</p>
+                              <p className="text-lg font-black text-slate-800">{predictAnalytics.gdd} <span className="text-xs font-normal text-slate-500">GDD</span></p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">Heat accumulation</p>
+                            </div>
+                            <div className="p-3.5 bg-orange-50/70 border border-orange-100 rounded-xl text-center">
+                              <p className="text-[10px] uppercase font-bold text-orange-600 mb-1">Heat Stress</p>
+                              <p className="text-lg font-black text-orange-700">{predictAnalytics.heat_stress} <span className="text-xs font-normal text-orange-600">Days</span></p>
+                              <p className="text-[10px] text-orange-500 mt-0.5">&gt;35°C threshold</p>
+                            </div>
+                            <div className="p-3.5 bg-amber-50/70 border border-amber-100 rounded-xl text-center">
+                              <p className="text-[10px] uppercase font-bold text-amber-600 mb-1">Dry Spells</p>
+                              <p className="text-lg font-black text-amber-700">{predictAnalytics.dry_days} <span className="text-xs font-normal text-amber-600">Days</span></p>
+                              <p className="text-[10px] text-amber-500 mt-0.5">Zero rain days</p>
+                            </div>
+                            <div className="p-3.5 bg-blue-50/70 border border-blue-100 rounded-xl text-center">
+                              <p className="text-[10px] uppercase font-bold text-blue-600 mb-1">Rain Forecast</p>
+                              <p className="text-lg font-black text-blue-700">{predictAnalytics.total_rain} <span className="text-xs font-normal text-blue-600">mm</span></p>
+                              <p className="text-[10px] text-blue-500 mt-0.5">Seasonal volume</p>
+                            </div>
+                          </div>
+
+                          {predictAnalytics.climate_report && (
+                            <div className="mt-3 p-3.5 bg-blue-50/60 border border-blue-100 rounded-xl flex items-start gap-2.5">
+                              <ThermometerSun className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                              <p className="text-xs text-blue-900 leading-relaxed font-medium">
+                                {predictAnalytics.climate_report}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {predictions.length > 1 && (
                         <div>
                           <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Top Cultivation Matches</h5>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                             {predictions.map((item, idx) => (
                               <div key={idx} className={`p-4 rounded-xl border flex items-center justify-between ${idx === 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-100'}`}>
                                 <div className="flex items-center gap-2.5">
@@ -507,7 +620,7 @@ export function FarmerPortal() {
                         </div>
                       )}
 
-                      <button onClick={() => { setPrediction(''); setPredictions([]); }} className="w-full py-2.5 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors flex items-center justify-center gap-2 border border-slate-200 rounded-xl">
+                      <button onClick={() => { setPrediction(''); setPredictions([]); setPredictAnalytics(null); }} className="w-full py-2.5 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors flex items-center justify-center gap-2 border border-slate-200 rounded-xl">
                         <RefreshCw className="w-4 h-4" /> Run New Analysis
                       </button>
                     </div>
@@ -542,7 +655,8 @@ export function FarmerPortal() {
                       {localMandiPrices.map((crop, idx) => (
                         <div key={crop.id || idx} className="rounded-2xl border border-slate-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow bg-white">
                           <div className="h-32 bg-slate-100 relative">
-                            <img src={crop.image || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&q=80'} alt={crop.commodity} className="w-full h-full object-cover" />
+                            {/* DYNAMIC SMART IMAGE */}
+                            <img src={getImageForCrop(crop.commodity)} alt={crop.commodity} className="w-full h-full object-cover" />
                             <span className="absolute bottom-2 left-2 bg-white/90 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{crop.category || 'Commodity'}</span>
                           </div>
                           <div className="p-4 flex flex-col flex-1">
@@ -644,7 +758,7 @@ export function FarmerPortal() {
           </div>
         )}
 
-        {/* OPEN BUYER DEMANDS TAB */}
+        {/* OPEN BUYER DEMANDS TAB - UPGRADED TO TICKETS */}
         {activeTab === 'demands' && (
           <div className="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-sm">
             <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -659,67 +773,74 @@ export function FarmerPortal() {
                 <p className="text-sm">Buyers haven't posted any specific crop requirements yet.</p>
               </div>
             ) : (
-              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 bg-white">
+              <div className="p-6 space-y-6 bg-white">
                 {demands.map((demand: any) => {
                   const requiredQty = parseInt(demand.quantity, 10) || 0;
 
                   return (
-                    <div key={demand.id} className="bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col relative overflow-hidden group hover:border-emerald-200 transition-colors">
-                      <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <h4 className="font-bold text-lg text-slate-800">{demand.crop_name}</h4>
-                          <p className="text-xs font-semibold text-emerald-600">Requested by Buyer: {demand.buyer__username}</p>
-                        </div>
-                        <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-1 rounded-md border border-slate-200 shadow-sm">{new Date(demand.created_at).toLocaleDateString()}</span>
-                      </div>
+                    <div key={demand.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row overflow-hidden hover:shadow-md transition-shadow">
+                      <div className="w-full md:w-2 bg-emerald-500 h-2 md:h-auto shrink-0"></div>
                       
-                      <div className="flex gap-4 mb-4 bg-white p-3 rounded-xl border border-slate-100">
-                        <div>
-                          <p className="text-[10px] uppercase font-bold text-slate-400">Target Price</p>
-                          <p className="font-bold text-emerald-700">₹{demand.expected_price}/kg</p>
+                      <div className="p-6 flex-1 flex flex-col md:flex-row justify-between gap-6">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Active Demand Ticket</span>
+                            <span className="text-xs font-semibold text-slate-400">Posted on {new Date(demand.created_at).toLocaleDateString()}</span>
+                          </div>
+                          
+                          <h3 className="text-2xl font-bold text-slate-800 mb-4">{demand.crop_name}</h3>
+                          
+                          <div className="flex flex-wrap gap-6 mb-4">
+                            <div className="bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100">
+                              <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Target Price</p>
+                              <p className="font-black text-emerald-700 text-lg">₹{demand.expected_price}<span className="text-sm font-medium text-slate-500">/kg</span></p>
+                            </div>
+                            <div className="bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100">
+                              <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Required Quantity</p>
+                              <p className="font-bold text-slate-800 text-lg">{demand.quantity} <span className="text-sm font-medium text-slate-500">kg</span></p>
+                            </div>
+                            <div className="bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100">
+                              <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Buyer</p>
+                              <p className="font-bold text-slate-800 text-lg">{demand.buyer__username}</p>
+                            </div>
+                          </div>
+                          
+                          {demand.description && (
+                            <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100 text-sm text-slate-600 italic">
+                              "{demand.description}"
+                            </div>
+                          )}
                         </div>
-                        <div className="w-px bg-slate-100" />
-                        <div>
-                          <p className="text-[10px] uppercase font-bold text-slate-400">Required Qty</p>
-                          <p className="font-bold text-slate-800">{demand.quantity} kg</p>
+                        
+                        <div className="flex flex-col justify-center border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-8 min-w-[200px]">
+                            
+                            {myCoop.length > 0 && requiredQty > 500 ? (
+                                <button 
+                                  onClick={() => {
+                                    setDirectOfferModal(demand);
+                                    setDirectOfferPrice(demand.expected_price);
+                                    setDirectOfferQty(demand.quantity);
+                                    setUseCoopStock(true); 
+                                  }} 
+                                  className="w-full py-3.5 bg-[#0b5c43] text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-900 transition-colors shadow-sm"
+                                >
+                                  <ShieldCheck className="w-4 h-4" /> Fulfill via Co-op
+                                </button>
+                            ) : (
+                                <button 
+                                  onClick={() => {
+                                    setDirectOfferModal(demand);
+                                    setDirectOfferPrice(demand.expected_price);
+                                    setDirectOfferQty(demand.quantity);
+                                    setUseCoopStock(false);
+                                  }} 
+                                  className="w-full py-3.5 bg-emerald-600 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors shadow-sm"
+                                >
+                                  <Handshake className="w-4 h-4" /> Send Direct Offer
+                                </button>
+                            )}
                         </div>
                       </div>
-                      
-                      {demand.description && (
-                        <div className="mb-5">
-                          <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Requirements</p>
-                          <p className="text-sm text-slate-600 italic leading-relaxed">"{demand.description}"</p>
-                        </div>
-                      )}
-
-                      {myCoop.length > 0 && requiredQty > 500 ? (
-                        <div className="mt-auto space-y-2">
-                          <button 
-                            onClick={() => {
-                              setDirectOfferModal(demand);
-                              setDirectOfferPrice(demand.expected_price);
-                              setDirectOfferQty(demand.quantity);
-                              setUseCoopStock(true); 
-                            }} 
-                            className="w-full py-2.5 bg-[#0b5c43] text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-900 transition-colors shadow-sm"
-                          >
-                            <ShieldCheck className="w-4 h-4" /> Fulfill using Co-op Stock
-                          </button>
-                        </div>
-                      ) : (
-                        <button 
-                          onClick={() => {
-                            setDirectOfferModal(demand);
-                            setDirectOfferPrice(demand.expected_price);
-                            setDirectOfferQty(demand.quantity);
-                            setUseCoopStock(false);
-                          }} 
-                          className="w-full mt-auto py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors shadow-sm"
-                        >
-                          <Handshake className="w-4 h-4" /> Send Direct Offer
-                        </button>
-                      )}
                     </div>
                   );
                 })}
@@ -728,7 +849,7 @@ export function FarmerPortal() {
           </div>
         )}
 
-        {/* OFFERS TAB WITH ESCROW TRACKING */}
+        {/* OFFERS TAB WITH ESCROW TRACKING - UPGRADED FONTS */}
         {activeTab === 'offers' && (
           <div className="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-sm">
             <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -746,16 +867,16 @@ export function FarmerPortal() {
             ) : (
               <div className="divide-y divide-slate-100">
                 {offers.map(offer => (
-                  <div key={offer.id} className="p-6 hover:bg-slate-50/50 transition-colors flex flex-col md:flex-row gap-6">
-                    <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 bg-slate-100 border border-slate-200">
-                      <img src={offer.image} alt={offer.productName} className="w-full h-full object-cover" />
-                    </div>
+                  <div key={offer.id} className="p-6 hover:bg-slate-50/50 transition-colors flex flex-col md:flex-row items-start md:items-center gap-6">
                     
-                    <div className="flex-1">
-                      <div className="flex justify-between items-start mb-2">
+                    {/* DYNAMIC SMART IMAGE */}
+                    <img src={getImageForCrop(offer.productName)} alt={offer.productName} className="w-32 h-32 rounded-2xl object-cover shrink-0 shadow-sm border border-slate-100" />
+                    
+                    <div className="flex-1 w-full">
+                      <div className="flex justify-between items-start mb-3">
                         <div>
-                          <h4 className="font-bold text-slate-800 text-lg">{offer.productName}</h4>
-                          <p className="text-sm text-slate-500">Buyer: <span className="font-bold text-slate-700">{offer.buyerId}</span></p>
+                          <h4 className="font-bold text-2xl text-slate-800">{offer.productName}</h4>
+                          <p className="text-sm text-slate-500 mt-0.5">Buyer: <span className="font-semibold text-slate-700">{offer.buyerId}</span></p>
                           
                           {offer.farmerId && String(offer.farmerId).includes('Co-op') && (
                             <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">
@@ -764,7 +885,7 @@ export function FarmerPortal() {
                           )}
                         </div>
                         
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1 ${
+                        <span className={`px-4 py-1.5 rounded-full text-xs font-bold border flex items-center gap-1.5 ${
                           offer.status === 'Pending' ? 'bg-orange-50 text-orange-600 border-orange-200' :
                           offer.status === 'Accepted' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
                           offer.status === 'Escrow Funded' ? 'bg-purple-50 text-purple-700 border-purple-200' :
@@ -783,33 +904,34 @@ export function FarmerPortal() {
                         </span>
                       </div>
                       
-                      <div className="flex flex-wrap gap-4 mb-4 mt-3">
-                        <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
-                          <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Offered Price</p>
-                          <p className="font-bold text-slate-800">₹{offer.proposedPrice} <span className="text-xs font-normal text-slate-500">/ kg</span></p>
+                      {/* BIG BOLD FONT FOR DEALS */}
+                      <div className="flex flex-wrap gap-4 text-sm mt-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div className="min-w-[90px]">
+                          <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Offered Price</p>
+                          <p className="font-bold text-slate-800 text-lg">₹{offer.proposedPrice}<span className="text-xs text-slate-500 font-medium">/kg</span></p>
                         </div>
-                        <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
-                          <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Quantity Required</p>
-                          <p className="font-bold text-slate-800">{offer.quantity} <span className="text-xs font-normal text-slate-500">kg</span></p>
+                        <div className="w-px bg-slate-200 mx-1 hidden sm:block"></div>
+                        <div className="min-w-[90px]">
+                          <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Quantity</p>
+                          <p className="font-bold text-slate-800 text-lg">{offer.quantity} <span className="text-xs text-slate-500 font-medium">kg</span></p>
                         </div>
-                        <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
-                          <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Total Deal Value</p>
-                          <p className="font-bold text-emerald-700">₹{((offer.proposedPrice || 0) * (offer.quantity || 0)).toLocaleString()}</p>
-                        </div>
-                        <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
-                          <p className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Transport Terms</p>
-                          <p className="font-bold text-slate-800 flex items-center gap-1.5"><Truck className="w-3.5 h-3.5 text-slate-500" /> {offer.transportArrangement}</p>
+                        <div className="w-px bg-slate-200 mx-1 hidden sm:block"></div>
+                        <div className="min-w-[90px]">
+                          <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Total Value</p>
+                          <p className="font-black text-emerald-700 text-xl">₹{((offer.proposedPrice || 0) * (offer.quantity || 0)).toLocaleString()}</p>
                         </div>
                       </div>
 
-                      {offer.status === 'Escrow Funded' && <p className="text-xs text-purple-600 mb-4 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-4 h-4"/> Funds are Secured in Escrow. It is safe to dispatch the goods.</p>}
-                      {offer.status === 'In Transit' && <p className="text-xs text-blue-600 mb-4 font-semibold flex items-center gap-1.5"><Truck className="w-4 h-4"/> Goods Dispatched. Waiting for Buyer to confirm delivery.</p>}
-                      {offer.status === 'Completed' && <p className="text-xs text-emerald-700 mb-4 font-semibold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/> Buyer confirmed delivery. Funds have been released to your Bank Account!</p>}
-                      
+                      {offer.status === 'Escrow Funded' && <p className="text-xs text-purple-600 mt-4 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-4 h-4"/> Funds are Secured in Escrow. It is safe to dispatch the goods.</p>}
+                      {offer.status === 'In Transit' && <p className="text-xs text-blue-600 mt-4 font-semibold flex items-center gap-1.5"><Truck className="w-4 h-4"/> Goods Dispatched. Waiting for Buyer to confirm delivery.</p>}
+                      {offer.status === 'Completed' && <p className="text-xs text-emerald-700 mt-4 font-semibold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/> Buyer confirmed delivery. Funds have been released to your Bank Account!</p>}
+                    </div>
+
+                    <div className="flex flex-col gap-2 w-full md:w-auto shrink-0 mt-4 md:mt-0">
                       {offer.status === 'Pending' && (
-                        <div className="flex gap-3 w-full md:w-auto mt-2 md:mt-0">
-                          <button onClick={() => updateOfferStatus(offer.id, 'Accepted')} className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors">
-                            <CheckCircle2 className="w-4 h-4" /> Accept Offer
+                        <>
+                          <button onClick={() => updateOfferStatus(offer.id, 'Accepted')} className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl text-sm shadow-sm hover:bg-emerald-700 transition-colors">
+                            Accept Offer
                           </button>
                           
                           <button 
@@ -817,21 +939,20 @@ export function FarmerPortal() {
                               setCounterModalData({ id: offer.id, currentPrice: offer.proposedPrice, productName: offer.productName, buyerId: offer.buyerId });
                               setCounterPrice('');
                             }} 
-                            className="flex-1 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-bold hover:bg-blue-100 transition-colors"
+                            className="px-6 py-3 bg-blue-50 text-blue-700 font-bold rounded-xl text-sm border border-blue-200 hover:bg-blue-100 transition-colors"
                           >
                             Counter Offer
                           </button>
 
-                          <button onClick={() => updateOfferStatus(offer.id, 'Declined')} className="flex-1 px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors"><XCircle className="w-4 h-4" /> Decline</button>
-                        </div>
+                          <button onClick={() => updateOfferStatus(offer.id, 'Declined')} className="px-6 py-3 bg-white text-slate-600 border border-slate-200 font-bold rounded-xl text-sm hover:bg-slate-50 transition-colors">Decline</button>
+                        </>
                       )}
 
                       {offer.status === 'Escrow Funded' && (
-                        <button onClick={() => updateOfferStatus(offer.id, 'In Transit')} className="w-full md:w-auto px-6 py-2.5 bg-[#0b5c43] text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-900 shadow-md">
-                          <Truck className="w-4 h-4" /> Dispatch & Mark as Shipped
+                        <button onClick={() => updateOfferStatus(offer.id, 'In Transit')} className="px-6 py-3 bg-[#0b5c43] text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg hover:bg-emerald-900 transition-colors">
+                          <Truck className="w-4 h-4" /> Mark as Dispatched
                         </button>
                       )}
-
                     </div>
                   </div>
                 ))}
@@ -876,7 +997,10 @@ export function FarmerPortal() {
                       {listings.map((product) => (
                         <motion.tr key={product.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 font-semibold text-slate-800 flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-100 shrink-0"><img src={product.image} className="w-full h-full object-cover" alt={product.name} /></div>
+                            <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-100 shrink-0">
+                                {/* DYNAMIC SMART IMAGE */}
+                                <img src={getImageForCrop(product.name)} className="w-full h-full object-cover" alt={product.name} />
+                            </div>
                             {product.name}
                           </td>
                           <td className="px-6 py-4 text-slate-600 font-medium">{product.category}</td>
@@ -895,57 +1019,57 @@ export function FarmerPortal() {
           </div>
         )}
 
-        {/* INDESTRUCTIBLE FRONTEND ANALYTICS DASHBOARD */}
+        {/* MULTILINGUAL INDESTRUCTIBLE ANALYTICS DASHBOARD */}
         {activeTab === 'analytics' && (
           <div className="space-y-8 animate-in fade-in duration-300">
             {/* 1. FINANCIAL SUMMARY KPI ROW */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Gross Revenue</span>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t.grossRev}</span>
                   <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">₹</div>
                 </div>
                 <p className="text-2xl font-black text-slate-800">
                   ₹{calcRevenue.toLocaleString()}
                 </p>
-                <p className="text-xs text-emerald-600 font-semibold mt-1">From {confirmedDeals.length} confirmed deals</p>
+                <p className="text-xs text-emerald-600 font-semibold mt-1">{t.revSub}</p>
               </div>
 
               <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Estimated Profit</span>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t.estProfit}</span>
                   <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold"><TrendingUp className="w-4 h-4"/></div>
                 </div>
                 <p className="text-2xl font-black text-emerald-700">
                   ₹{calcProfit.toLocaleString()}
                 </p>
-                <p className="text-xs text-slate-400 font-medium mt-1">~48% net margin after input costs</p>
+                <p className="text-xs text-slate-400 font-medium mt-1">{t.profitSub}</p>
               </div>
 
               <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Volume Sold</span>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t.volSold}</span>
                   <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center font-bold"><Package className="w-4 h-4"/></div>
                 </div>
                 <p className="text-2xl font-black text-slate-800">
                   {calcVolume.toLocaleString()} <span className="text-sm font-normal text-slate-400">kg</span>
                 </p>
-                <p className="text-xs text-slate-400 font-medium mt-1">Total crop tonnage fulfilled</p>
+                <p className="text-xs text-slate-400 font-medium mt-1">{t.volSub}</p>
               </div>
 
               <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Avg Selling Rate</span>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t.avgRate}</span>
                   <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center font-bold">⚡</div>
                 </div>
                 <p className="text-2xl font-black text-slate-800">
                   ₹{calcAvg} <span className="text-sm font-normal text-slate-400">/kg</span>
                 </p>
-                <p className="text-xs text-emerald-600 font-medium mt-1">+6.4% above local APMC modal</p>
+                <p className="text-xs text-emerald-600 font-medium mt-1">{t.rateSub}</p>
               </div>
             </div>
 
-            {/* NEW: TOP PERFORMING CROPS (FRONTEND VISUAL) */}
+            {/* TOP PERFORMING CROPS */}
             {topCrops.length > 0 && (
               <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
                 <div className="flex items-center justify-between border-b border-slate-50 pb-4 mb-5">
@@ -954,8 +1078,8 @@ export function FarmerPortal() {
                       <PieChart className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-slate-800">Top Performing Crops</h3>
-                      <p className="text-xs text-slate-400">Revenue distribution by commodity</p>
+                      <h3 className="font-bold text-slate-800">{t.topCrops}</h3>
+                      <p className="text-xs text-slate-400">{t.topSub}</p>
                     </div>
                   </div>
                 </div>
@@ -978,15 +1102,15 @@ export function FarmerPortal() {
 
             {/* REAL-TIME WEATHER & SOIL CARD */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-5">
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-5 flex flex-col">
                 <div className="flex items-center justify-between border-b border-slate-50 pb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center font-bold">
                       <Sun className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-slate-800">Atmospheric Condition</h3>
-                      <p className="text-xs text-slate-400">Live telemetry for {selectedDistrict}</p>
+                      <h3 className="font-bold text-slate-800">{t.atmos}</h3>
+                      <p className="text-xs text-slate-400">{t.atmosSub} {selectedDistrict}</p>
                     </div>
                   </div>
                   <span className="text-[10px] font-bold px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full">Live Open-Meteo</span>
@@ -994,23 +1118,23 @@ export function FarmerPortal() {
 
                 <div className="grid grid-cols-3 gap-3">
                   <div className="bg-slate-50 p-3.5 rounded-xl text-center">
-                    <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Temperature</p>
+                    <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">{t.temp}</p>
                     <p className="text-xl font-bold text-slate-800">{weatherTemp}°C</p>
                   </div>
                   <div className="bg-slate-50 p-3.5 rounded-xl text-center">
-                    <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Rel. Humidity</p>
+                    <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">{t.hum}</p>
                     <p className="text-xl font-bold text-slate-800">{analyticsData?.weather?.humidity ?? 60}%</p>
                   </div>
                   <div className="bg-slate-50 p-3.5 rounded-xl text-center">
-                    <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Wind Speed</p>
+                    <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">{t.wind}</p>
                     <p className="text-xl font-bold text-slate-800">{analyticsData?.weather?.wind_speed ?? 12} <span className="text-xs font-normal">km/h</span></p>
                   </div>
                 </div>
 
-                <div className="p-4 bg-blue-50/60 rounded-2xl border border-blue-100 flex items-center justify-between">
+                <div className="p-4 bg-blue-50/60 rounded-2xl border border-blue-100 flex items-center justify-between mt-auto">
                   <div>
-                    <p className="text-xs font-bold text-blue-900">Precipitation Forecast</p>
-                    <p className="text-xs text-blue-700">Surface Rain Probability: {rainChance} mm</p>
+                    <p className="text-xs font-bold text-blue-900">{t.precip}</p>
+                    <p className="text-xs text-blue-700">{t.rainProb}: {rainChance} mm</p>
                   </div>
                   <Droplets className="w-6 h-6 text-blue-500" />
                 </div>
@@ -1023,8 +1147,8 @@ export function FarmerPortal() {
                       <Sprout className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-slate-800">Soil & Mineral Profile</h3>
-                      <p className="text-xs text-slate-400">Agro-Climatic Baseline</p>
+                      <h3 className="font-bold text-slate-800">{t.soil}</h3>
+                      <p className="text-xs text-slate-400">{t.soilSub}</p>
                     </div>
                   </div>
                   <span className="text-[10px] font-bold px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full">{analyticsData?.soil?.soil_type?.split(' ')[0] || 'Regional'} Profile</span>
@@ -1032,22 +1156,29 @@ export function FarmerPortal() {
 
                 <div className="space-y-2.5">
                   <div className="flex justify-between items-center text-sm p-2 rounded-lg hover:bg-slate-50">
-                    <span className="text-slate-500 font-medium">Predominant Geology:</span>
+                    <span className="text-slate-500 font-medium">{t.geo}:</span>
                     <span className="font-bold text-slate-800">{analyticsData?.soil?.soil_type ?? 'Black Cotton Soil'}</span>
                   </div>
                   <div className="flex justify-between items-center text-sm p-2 rounded-lg hover:bg-slate-50">
-                    <span className="text-slate-500 font-medium">Active Soil Moisture:</span>
+                    <span className="text-slate-500 font-medium">{t.moist}:</span>
                     <span className="font-bold text-emerald-600">{analyticsData?.soil?.current_moisture_pct ?? 26}% (Adequate)</span>
                   </div>
                   <div className="flex justify-between items-center text-sm p-2 rounded-lg hover:bg-slate-50">
-                    <span className="text-slate-500 font-medium">Soil Reaction (pH):</span>
+                    <span className="text-slate-500 font-medium">{t.ph}:</span>
                     <span className="font-bold text-slate-800">{analyticsData?.soil?.ph ?? '7.8 (Alkaline)'}</span>
                   </div>
                   <div className="flex justify-between items-center text-sm p-2 rounded-lg hover:bg-slate-50">
-                    <span className="text-slate-500 font-medium">NPK Readiness Index:</span>
+                    <span className="text-slate-500 font-medium">{t.npk}:</span>
                     <span className="font-bold text-slate-800">N: {analyticsData?.soil?.nitrogen?.split(' ')[0] ?? 'Low'} | P: {analyticsData?.soil?.phosphorus?.split(' ')[0] ?? 'Med'} | K: {analyticsData?.soil?.potassium?.split(' ')[0] ?? 'High'}</span>
                   </div>
                 </div>
+                
+                {/* NEW SCIENTIFIC SOIL EXPLANATION */}
+                {analyticsData?.soil?.description && (
+                  <div className="mt-4 p-3.5 bg-emerald-50/50 rounded-xl border border-emerald-100 text-sm text-slate-600 leading-relaxed italic">
+                    {analyticsData.soil.description}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1057,7 +1188,7 @@ export function FarmerPortal() {
                 <div className="w-9 h-9 rounded-full bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold">
                   <TrendingUp className="w-5 h-5" />
                 </div>
-                <h3 className="text-xl font-bold">Operational Recommendations</h3>
+                <h3 className="text-xl font-bold">{t.opRec}</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 {confirmedDeals.length > 0 ? (
